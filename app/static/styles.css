@@ -1,0 +1,168 @@
+/* =========================================================================
+   EduPulse Ops — Shared Custom Styles
+   Login page, Dashboard, and future pages
+   ========================================================================= */
+
+/* --- View Transitions --- */
+.fade-in-slide {
+    animation: fadeInSlide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInSlide {
+    from { opacity: 0; transform: translateY(15px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Glassmorphism Panels --- */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-panel-dark {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* --- Custom Scrollbar (Webkit) --- */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.35);
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.55);
+}
+
+/* --- Focus Accessibility --- */
+input:focus, button:focus, select:focus, textarea:focus, a:focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+/* Visible focus ring for keyboard navigation (overrides Tailwind reset) */
+:focus-visible {
+    outline: 2px solid #0d9488 !important;
+    outline-offset: 2px;
+}
+
+/* --- Soft Loading Pulse --- */
+@keyframes micro-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.micro-pulse {
+    animation: micro-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* --- Dashboard Card Entrance --- */
+@keyframes cardFadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.card-enter {
+    animation: cardFadeUp 0.4s ease-out forwards;
+}
+
+/* Staggered entrance delays for KPI cards */
+.card-enter:nth-child(1) { animation-delay: 0.05s; }
+.card-enter:nth-child(2) { animation-delay: 0.12s; }
+.card-enter:nth-child(3) { animation-delay: 0.19s; }
+
+/* --- Skeleton Shimmer (lighter than animate-pulse for low-spec) --- */
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* --- Expandable Sidebar Transitions & Animations --- */
+#sidebar-nav {
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-label {
+    transition: opacity 0.2s ease-in-out;
+}
+
+/* Toast styling */
+.toast-slide-in {
+    animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastSlideIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-slide-out {
+    animation: toastSlideOut 0.2s ease-in forwards;
+}
+
+@keyframes toastSlideOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(-10px) scale(0.95); }
+}
+
+/* =========================================================================
+   Collapsed Sidebar Centering & Layout Styling
+   ========================================================================= */
+#sidebar-nav.w-20 .h-16 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    justify-content: center !important;
+}
+
+#sidebar-nav.w-20 .h-16 a {
+    justify-content: center !important;
+    gap: 0 !important;
+}
+
+#sidebar-nav.w-20 .sidebar-link {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    justify-content: center !important;
+    gap: 0 !important;
+}
+
+#sidebar-nav.w-20 .sidebar-link i {
+    margin-right: 0 !important;
+}
+
+#sidebar-nav.w-20 .border-t {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+}
+
+#sidebar-nav.w-20 .border-t > div {
+    justify-content: center !important;
+    width: 100% !important;
+}
+
+#sidebar-nav.w-20 #sidebar-collapse-btn {
+    margin: 0 auto !important;
+}
+

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPulse Ops — Teacher Access Portal</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Secure portal for school teachers to access EduPulse Ops. Manage attendance, generate timetables, and evaluate performance in one central workspace.">
+    <meta name="theme-color" content="#0d9488">
+
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Theme Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            deep: '#0f172a',    /* Deep Blue slate-900 */
+                            teal: '#0d9488',    /* Warm Teal teal-600 */
+                            green: '#10b981',   /* Soft Green emerald-500 */
+                            sage: '#86efac',    /* Light Sage emerald-300 */
+                            slate: '#f8fafc',   /* Off-white background */
+                            accent: '#f0fdfa'   /* Lightest teal */
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="h-full font-sans antialiased text-slate-800">
+
+    <!-- Toast Notification (Screen Reader & Visual) -->
+    <div id="toast" role="status" aria-live="polite" class="fixed top-4 right-4 z-50 p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 opacity-0 pointer-events-none flex items-center gap-3">
+        <div class="toast-icon"></div>
+        <div id="toast-message" class="text-sm font-medium"></div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="min-h-screen grid grid-cols-1 lg:grid-cols-2">
+        
+        <!-- ================= LEFT COLUMN: HERO PANEL (DESKTOP ONLY) ================= -->
+        <div class="hidden lg:flex relative bg-brand-deep flex-col justify-between p-12 overflow-hidden select-none">
+            <!-- Decorative Background Glows -->
+            <div class="absolute top-[-20%] left-[-20%] w-96 h-96 rounded-full bg-brand-teal/20 blur-[100px]"></div>
+            <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 rounded-full bg-brand-green/10 blur-[120px]"></div>
+
+            <!-- Top Brand Header -->
+            <div class="relative z-10 flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-brand-teal to-brand-green p-2.5 rounded-xl shadow-lg shadow-teal-500/20">
+                    <!-- Custom SVG Logo -->
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-white text-xl font-bold tracking-tight">EduPulse <span class="text-brand-teal">Ops</span></h1>
+                    <p class="text-slate-400 text-xs tracking-wider uppercase font-semibold">School Optimization System</p>
+                </div>
+            </div>
+
+            <!-- Middle Illustration System -->
+            <div class="relative z-10 my-auto flex flex-col items-center justify-center max-w-lg mx-auto">
+                <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl shadow-slate-950/50 border border-slate-800 bg-slate-950/20 mb-8 flex items-center justify-center">
+                    <img src="/static/assets/education_hero.png" alt="Collaborative and digital classroom illustration representing academic growth" class="w-full h-full object-cover transition-transform duration-700 hover:scale-105">
+                </div>
+                
+                <!-- Rotating Quotes Carousel (Dynamic/Micro-animation) -->
+                <div class="w-full min-h-[90px] text-center transition-all duration-500">
+                    <p id="quote-text" class="text-slate-100 text-lg md:text-xl font-light italic leading-relaxed">
+                        "Teaching is the one profession that creates all other professions."
+                    </p>
+                    <p id="quote-author" class="text-brand-teal text-sm mt-2 font-medium tracking-wide">
+                        — Unknown
+                    </p>
+                </div>
+            </div>
+
+            <!-- Bottom Information Panel -->
+            <div class="relative z-10 flex items-center justify-between text-slate-400 text-xs border-t border-slate-800 pt-6">
+                <div>
+                    <span class="font-medium text-slate-300">Malaysia Public Schools</span> Edition
+                </div>
+                <div class="flex gap-4">
+                    <a href="#" class="hover:text-white transition-colors duration-200">Help Desk</a>
+                    <a href="#" class="hover:text-white transition-colors duration-200">Legal</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= RIGHT COLUMN: FORM PANEL ================= -->
+        <div class="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 bg-brand-slate relative">
+            
+            <!-- Mobile Brand Header (Visible only on mobile/tablet) -->
+            <div class="lg:hidden flex items-center gap-3 mb-10 justify-center">
+                <div class="bg-gradient-to-tr from-brand-teal to-brand-green p-2.5 rounded-xl shadow-lg shadow-teal-500/10">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"></path>
+                    </svg>
+                </div>
+                <div class="text-left">
+                    <h1 class="text-slate-900 text-xl font-bold tracking-tight">EduPulse <span class="text-brand-teal">Ops</span></h1>
+                    <p class="text-slate-500 text-xs tracking-wider uppercase font-semibold">Teacher Access Portal</p>
+                </div>
+            </div>
+
+            <!-- Card Wrap -->
+            <div class="w-full max-w-md mx-auto">
+                
+                <!-- ================= VIEW 1: LOGIN ================= -->
+                <div id="login-view" class="fade-in-slide">
+                    <!-- Heading -->
+                    <div class="mb-8">
+                        <h2 class="text-3xl font-bold tracking-tight text-slate-900">Welcome back</h2>
+                        <p class="mt-2 text-sm text-slate-500">
+                            Don't have an account? 
+                            <a id="to-signup" href="#" class="font-medium text-brand-teal hover:text-teal-700 transition-colors duration-200 focus:underline focus:outline-none">Create an account</a>
+                        </p>
+                    </div>
+
+                    <!-- Login Form -->
+                    <form id="login-form" class="space-y-5" aria-label="Teacher Log In">
+                        <!-- Global Error Message -->
+                        <div class="global-error hidden p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium flex items-center gap-2" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>Invalid credentials.</span>
+                        </div>
+
+                        <!-- Email Address -->
+                        <div class="form-group flex flex-col">
+                            <label for="login-email" class="text-sm font-semibold text-slate-700 mb-1.5 flex justify-between">
+                                Email Address
+                            </label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-envelope text-sm"></i>
+                                </span>
+                                <input type="email" id="login-email" name="email" required autocomplete="email" placeholder="name@school.edu.my" 
+                                    class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                            </div>
+                        </div>
+
+                        <!-- Password -->
+                        <div class="form-group flex flex-col">
+                            <div class="flex justify-between items-center mb-1.5">
+                                <label for="login-password" class="text-sm font-semibold text-slate-700">Password</label>
+                                <a id="forgot-password" href="#" class="text-xs font-semibold text-brand-teal hover:text-teal-700 transition-colors duration-200 focus:underline focus:outline-none">Forgot password?</a>
+                            </div>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-lock text-sm"></i>
+                                </span>
+                                <input type="password" id="login-password" name="password" required autocomplete="current-password" placeholder="••••••••" 
+                                    class="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                                <button type="button" id="toggle-login-password" aria-label="Toggle password visibility" 
+                                    class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors duration-200">
+                                    <i class="fas fa-eye text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Remember Me -->
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2.5 select-none cursor-pointer">
+                                <input type="checkbox" id="remember-me" name="remember" 
+                                    class="w-4.5 h-4.5 rounded border-slate-300 text-brand-teal focus:ring-brand-teal/30 focus:ring-offset-0 transition duration-150 ease-in-out cursor-pointer">
+                                <span class="text-sm text-slate-600">Remember my email</span>
+                            </label>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" class="w-full py-3 px-4 bg-brand-teal hover:bg-teal-700 text-white font-medium rounded-xl shadow-lg shadow-teal-600/10 hover:shadow-teal-600/20 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2">
+                            Sign In
+                        </button>
+                    </form>
+                </div>
+
+                <!-- ================= VIEW 2: REGISTER / SIGN UP ================= -->
+                <div id="signup-view" class="hidden">
+                    <!-- Heading -->
+                    <div class="mb-6">
+                        <h2 class="text-3xl font-bold tracking-tight text-slate-900">Create account</h2>
+                        <p class="mt-2 text-sm text-slate-500">
+                            Already registered? 
+                            <a id="to-login" href="#" class="font-medium text-brand-teal hover:text-teal-700 transition-colors duration-200 focus:underline focus:outline-none">Log in here</a>
+                        </p>
+                    </div>
+
+                    <!-- Signup Form -->
+                    <form id="signup-form" class="space-y-4" aria-label="Teacher Account Registration">
+                        <!-- Global Error Message -->
+                        <div class="global-error hidden p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium flex items-center gap-2" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>Please verify your details.</span>
+                        </div>
+
+                        <!-- Full Name -->
+                        <div class="form-group flex flex-col">
+                            <label for="signup-fullname" class="text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-user text-sm"></i>
+                                </span>
+                                <input type="text" id="signup-fullname" name="fullname" required autocomplete="name" placeholder="Sir/Madam Name" 
+                                    class="w-full pl-10 pr-4 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                            </div>
+                        </div>
+
+                        <!-- School Email Address -->
+                        <div class="form-group flex flex-col">
+                            <label for="signup-email" class="text-sm font-semibold text-slate-700 mb-1 flex justify-between">
+                                School Email Address
+                            </label>
+                            <p id="email-note" class="text-[11px] text-slate-500 mb-1">Please use your school-issued email if applicable (e.g., moe-dl.edu.my)</p>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-envelope text-sm"></i>
+                                </span>
+                                <input type="email" id="signup-email" name="email" required aria-describedby="email-note" autocomplete="email" placeholder="yourname@moe-dl.edu.my" 
+                                    class="w-full pl-10 pr-4 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                            </div>
+                        </div>
+
+                        <!-- Contact Number & Staff ID (Two-column layout on desktop) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Contact Number -->
+                            <div class="form-group flex flex-col">
+                                <label for="signup-contact" class="text-sm font-semibold text-slate-700 mb-1.5">Contact Number</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                        <i class="fas fa-phone text-sm"></i>
+                                    </span>
+                                    <input type="tel" id="signup-contact" name="contact" placeholder="+60123456789" 
+                                        class="w-full pl-10 pr-4 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                                </div>
+                            </div>
+
+                            <!-- Staff ID -->
+                            <div class="form-group flex flex-col">
+                                <div class="flex justify-between items-center mb-1.5">
+                                    <label for="signup-staffid" class="text-sm font-semibold text-slate-700">Staff ID</label>
+                                    <span class="text-[10px] text-slate-400 font-medium">Optional</span>
+                                </div>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                        <i class="fas fa-id-card text-sm"></i>
+                                    </span>
+                                    <input type="text" id="signup-staffid" name="staffid" placeholder="T-9488" 
+                                        class="w-full pl-10 pr-4 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Passwords -->
+                        <div class="form-group flex flex-col">
+                            <label for="signup-password" class="text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-lock text-sm"></i>
+                                </span>
+                                <input type="password" id="signup-password" name="password" required autocomplete="new-password" placeholder="Min. 8 characters" 
+                                    class="w-full pl-10 pr-10 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                                <button type="button" id="toggle-signup-password" aria-label="Toggle password visibility" 
+                                    class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors duration-200">
+                                    <i class="fas fa-eye text-sm"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Password Strength Indicator -->
+                            <div class="mt-2">
+                                <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                    <div id="password-strength-bar" class="w-0 h-full rounded-full transition-all duration-300"></div>
+                                </div>
+                                <span id="password-strength-text" class="text-xs font-semibold mt-1 block"></span>
+                            </div>
+                        </div>
+
+                        <!-- Confirm Password -->
+                        <div class="form-group flex flex-col">
+                            <label for="signup-confirm-password" class="text-sm font-semibold text-slate-700 mb-1.5">Confirm Password</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fas fa-shield-halved text-sm"></i>
+                                </span>
+                                <input type="password" id="signup-confirm-password" name="confirm_password" required autocomplete="new-password" placeholder="Repeat your password" 
+                                    class="w-full pl-10 pr-10 py-2.2 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 text-sm focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 transition-all duration-200">
+                                <button type="button" id="toggle-signup-confirm-password" aria-label="Toggle password visibility" 
+                                    class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors duration-200">
+                                    <i class="fas fa-eye text-sm"></i>
+                                </button>
+                            </div>
+                            <span id="password-match-text" class="text-xs font-medium mt-1 block"></span>
+                        </div>
+
+                        <!-- Terms of Service Checkbox -->
+                        <div class="form-group flex flex-col pt-1">
+                            <label class="flex items-start gap-2.5 select-none cursor-pointer">
+                                <input type="checkbox" id="signup-terms" name="terms" required 
+                                    class="mt-1 w-4.5 h-4.5 rounded border-slate-300 text-brand-teal focus:ring-brand-teal/30 focus:ring-offset-0 transition duration-150 ease-in-out cursor-pointer">
+                                <span class="text-xs text-slate-600 leading-normal">
+                                    I agree to the <a href="#" class="font-semibold text-brand-teal hover:underline">Terms of Service</a> and <a href="#" class="font-semibold text-brand-teal hover:underline">Privacy Policy</a>
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Register Submit Button -->
+                        <button type="submit" class="w-full py-3 px-4 bg-brand-teal hover:bg-teal-700 text-white font-medium rounded-xl shadow-lg shadow-teal-600/10 hover:shadow-teal-600/20 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2">
+                            Create Account
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+            
+            <!-- Bottom Copyright -->
+            <div class="text-center text-slate-400 text-[11px] mt-12 w-full max-w-md mx-auto">
+                &copy; 2026 EduPulse Ops. All rights reserved.
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Vanilla Script -->
+    <script src="/static/app.js?v=2"></script>
+</body>
+</html>
