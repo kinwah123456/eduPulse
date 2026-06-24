@@ -278,3 +278,138 @@ def test_feedback_submission_workflow(client: TestClient, db_session: Session):
     assert ack_data["status"] == "acknowledged"
     assert ack_data["acknowledged_by_id"] is not None
     assert ack_data["acknowledged_by"]["full_name"] == "Merit Admin 2"
+
+
+def test_cleanup_expired_feedback_submissions(db_session: Session):
+    from datetime import datetime, timedelta
+    from app.models.merit import MeritSubmission
+    from app.services.merit_service import cleanup_expired_feedback_submissions
+    import os
+    import json
+
+    # 1. Create a dummy file to simulate an uploaded image
+    os.makedirs("app/static/feedback_uploads", exist_ok=True)
+    dummy_img_path = "app/static/feedback_uploads/test_cleanup_dummy.png"
+    with open(dummy_img_path, "w") as f:
+        f.write("dummy")
+
+    assert os.path.exists(dummy_img_path)
+
+    # 2. Add an expired submission (older than 1 year, e.g. 366 days ago)
+    expired_date = datetime.now() - timedelta(days=366)
+    expired_sub = MeritSubmission(
+        is_anonymous=True,
+        description="Expired report description",
+        images=json.dumps(["/static/feedback_uploads/test_cleanup_dummy.png"]),
+        status="unread",
+        created_at=expired_date,
+        updated_at=expired_date
+    )
+
+    # 3. Add a non-expired submission (e.g. 10 days ago)
+    valid_date = datetime.now() - timedelta(days=10)
+    valid_sub = MeritSubmission(
+        is_anonymous=True,
+        description="Valid report description",
+        images=json.dumps([]),
+        status="unread",
+        created_at=valid_date,
+        updated_at=valid_date
+    )
+
+    db_session.add(expired_sub)
+    db_session.add(valid_sub)
+    db_session.commit()
+
+    # 4. Run cleanup
+    deleted_count = cleanup_expired_feedback_submissions(db_session, max_age_days=365)
+
+    # 5. Assertions
+    assert deleted_count == 1
+    # Check that expired sub is deleted
+    assert db_session.query(MeritSubmission).filter(MeritSubmission.id == expired_sub.id).first() is None
+    # Check that non-expired sub is NOT deleted
+    assert db_session.query(MeritSubmission).filter(MeritSubmission.id == valid_sub.id).first() is not None
+    # Check that the image file was deleted
+    assert not os.path.exists(dummy_img_path)
+    
+    # Cleanup database
+    db_session.delete(valid_sub)
+    db_session.commit()
+
+
+def test_delete_feedback_submission_permissions(client: TestClient, db_session: Session):
+    from app.models.merit import MeritSubmission
+    import json
+    import os
+
+    # 1. Setup Admin and Teacher
+    # Register Admin
+    resp = client.post("/api/v1/auth/register", json={
+        "email": "admin-del@merit.local",
+        "password": "admin123",
+        "full_name": "Merit Admin Del",
+        "role": "ADMIN"
+    })
+    assert resp.status_code == 200
+    
+    # Login Admin
+    resp = client.post("/api/v1/auth/login", data={
+        "username": "admin-del@merit.local",
+        "password": "admin123"
+    })
+    assert resp.status_code == 200
+    admin_headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # Register Teacher
+    resp = client.post("/api/v1/auth/register", headers=admin_headers, json={
+        "email": "teacher-del@merit.local",
+        "password": "teacher123",
+        "full_name": "Cikgu Merit Del",
+        "role": "TEACHER",
+        "employee_id": "TMDEL01"
+    })
+    assert resp.status_code == 200
+
+    # Login Teacher
+    resp = client.post("/api/v1/auth/login", data={
+        "username": "teacher-del@merit.local",
+        "password": "teacher123"
+    })
+    assert resp.status_code == 200
+    teacher_headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # 2. Create a submission
+    os.makedirs("app/static/feedback_uploads", exist_ok=True)
+    dummy_img_path = "app/static/feedback_uploads/test_delete_dummy.png"
+    with open(dummy_img_path, "w") as f:
+        f.write("dummy")
+
+    sub = MeritSubmission(
+        is_anonymous=True,
+        description="To be deleted description",
+        images=json.dumps(["/static/feedback_uploads/test_delete_dummy.png"]),
+        status="unread"
+    )
+    db_session.add(sub)
+    db_session.commit()
+    sub_id = sub.id
+
+    # 3. Try to delete as Teacher (should fail with 403 Forbidden)
+    resp = client.delete(f"/api/v1/merit/submissions/{sub_id}", headers=teacher_headers)
+    assert resp.status_code == 403
+
+    # Check that submission is NOT deleted
+    assert db_session.query(MeritSubmission).filter(MeritSubmission.id == sub_id).first() is not None
+    assert os.path.exists(dummy_img_path)
+
+    # 4. Delete as Admin (should succeed)
+    resp = client.delete(f"/api/v1/merit/submissions/{sub_id}", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Feedback submission deleted"
+
+    # Check that submission IS deleted and image file is gone
+    assert db_session.query(MeritSubmission).filter(MeritSubmission.id == sub_id).first() is None
+    assert not os.path.exists(dummy_img_path)
+
+

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 from app.models.merit import MeritOption, MeritLog, MeritSubmission
@@ -172,3 +172,53 @@ def acknowledge_feedback_submission(db: Session, submission_id: int, user_id: in
     db.commit()
     db.refresh(submission)
     return submission
+
+
+def cleanup_expired_feedback_submissions(db: Session, max_age_days: int = 365) -> int:
+    """Delete feedback submissions older than 1 year (365 days) and their images."""
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+    expired_subs = db.query(MeritSubmission).filter(MeritSubmission.created_at < cutoff).all()
+    count = len(expired_subs)
+    
+    for sub in expired_subs:
+        if sub.images:
+            try:
+                paths = json.loads(sub.images)
+                for path in paths:
+                    if path.startswith("/static/"):
+                        # Convert /static/... to app/static/...
+                        fs_path = os.path.join("app", "static", path.replace("/static/", "", 1))
+                        if os.path.exists(fs_path):
+                            os.remove(fs_path)
+            except Exception as e:
+                print(f"Failed to remove submission image: {e}")
+        db.delete(sub)
+        
+    if count > 0:
+        db.commit()
+        
+    return count
+
+
+def delete_feedback_submission(db: Session, submission_id: int) -> None:
+    """Delete a specific feedback submission and its uploaded images from the filesystem."""
+    submission = db.query(MeritSubmission).filter(MeritSubmission.id == submission_id).first()
+    if not submission:
+        raise NotFoundException(f"Feedback submission with id {submission_id} not found")
+        
+    if submission.images:
+        try:
+            paths = json.loads(submission.images)
+            for path in paths:
+                if path.startswith("/static/"):
+                    # Convert /static/... to app/static/...
+                    fs_path = os.path.join("app", "static", path.replace("/static/", "", 1))
+                    if os.path.exists(fs_path):
+                        os.remove(fs_path)
+        except Exception as e:
+            print(f"Failed to remove submission image on delete: {e}")
+            
+    db.delete(submission)
+    db.commit()
+
+

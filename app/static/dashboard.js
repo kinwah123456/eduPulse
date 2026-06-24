@@ -6362,36 +6362,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadFeedbackSubmissions() {
         if (isSimulated) {
-            feedbackSubmissionsList = [
-                {
-                    id: 101,
-                    is_anonymous: true,
-                    identity_card_number: null,
-                    description: "Witnessed senior student bullying a junior behind the canteen during recess.",
-                    location: "Canteen",
-                    images: ["/static/assets/education_hero.png"],
-                    status: "unread",
-                    acknowledged_by_id: null,
-                    acknowledged_at: null,
-                    student_id: null,
-                    created_at: new Date(Date.now() - 3600000).toISOString()
-                },
-                {
-                    id: 102,
-                    is_anonymous: false,
-                    identity_card_number: "120101-14-1111",
-                    description: "Complain about toilet cleanliness on Block B level 3. The pipes are leaking.",
-                    location: "Block B Level 3",
-                    images: [],
-                    status: "acknowledged",
-                    acknowledged_by_id: 999,
-                    acknowledged_at: new Date().toISOString(),
-                    student_id: 1,
-                    student: { id: 1, full_name: "Muhammad Ali Bin Hassan", student_id_number: "S2001" },
-                    acknowledged_by: { id: 999, full_name: "Noraini Binti Abdullah", role: "TEACHER" },
-                    created_at: new Date(Date.now() - 7200000).toISOString()
+            const stored = localStorage.getItem('simulated_feedback_submissions');
+            if (stored) {
+                try {
+                    feedbackSubmissionsList = JSON.parse(stored);
+                } catch (e) {
+                    console.error("Failed to parse simulated feedback submissions:", e);
+                    feedbackSubmissionsList = [];
                 }
-            ];
+            } else {
+                feedbackSubmissionsList = [
+                    {
+                        id: 101,
+                        is_anonymous: true,
+                        identity_card_number: null,
+                        description: "Witnessed senior student bullying a junior behind the canteen during recess.",
+                        location: "Canteen",
+                        images: ["/static/assets/education_hero.png"],
+                        status: "unread",
+                        acknowledged_by_id: null,
+                        acknowledged_at: null,
+                        student_id: null,
+                        created_at: new Date(Date.now() - 3600000).toISOString()
+                    },
+                    {
+                        id: 102,
+                        is_anonymous: false,
+                        identity_card_number: "120101-14-1111",
+                        description: "Complain about toilet cleanliness on Block B level 3. The pipes are leaking.",
+                        location: "Block B Level 3",
+                        images: [],
+                        status: "acknowledged",
+                        acknowledged_by_id: 999,
+                        acknowledged_at: new Date().toISOString(),
+                        student_id: 1,
+                        student: { id: 1, full_name: "Muhammad Ali Bin Hassan", student_id_number: "S2001" },
+                        acknowledged_by: { id: 999, full_name: "Noraini Binti Abdullah", role: "TEACHER" },
+                        created_at: new Date(Date.now() - 7200000).toISOString()
+                    }
+                ];
+            }
+
+            // Filter out entries older than 365 days
+            const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
+            feedbackSubmissionsList = feedbackSubmissionsList.filter(sub => {
+                return new Date(sub.created_at).getTime() >= oneYearAgo;
+            });
+
+            // Save the filtered list back to localStorage
+            localStorage.setItem('simulated_feedback_submissions', JSON.stringify(feedbackSubmissionsList));
+
             renderFeedbackSubmissions();
         } else {
             try {
@@ -6468,13 +6488,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     <i class="fas fa-circle-check"></i> Acknowledged
                    </span>`;
 
+            const isAdmin = currentUser && currentUser.role === 'ADMIN';
             let actionHtml = '';
             if (isUnread) {
                 actionHtml = `
-                    <button onclick="acknowledgeSubmission(${sub.id})" 
-                            class="px-3 py-1.5 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-brand-teal/10 cursor-pointer">
-                        Acknowledge
-                    </button>
+                    <div class="flex items-center justify-end gap-2">
+                        <button onclick="acknowledgeSubmission(${sub.id})" 
+                                class="px-3 py-1.5 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-brand-teal/10 cursor-pointer">
+                            Acknowledge
+                        </button>
+                        ${isAdmin ? `
+                        <button onclick="deleteSubmission(${sub.id})" 
+                                class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete submission">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        ` : ''}
+                    </div>
                 `;
             } else {
                 const teacherName = sub.acknowledged_by ? sub.acknowledged_by.full_name : 'Teacher';
@@ -6482,10 +6511,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
                 }) : '';
                 actionHtml = `
-                    <div class="text-xs font-semibold text-slate-700 flex flex-col items-end">
-                        <span class="text-[10px] text-slate-400 font-bold uppercase">Acknowledged by:</span>
-                        <span>${teacherName}</span>
-                        <span class="text-[9px] text-slate-400 font-medium">${ackDate}</span>
+                    <div class="flex items-center justify-end gap-3">
+                        <div class="text-xs font-semibold text-slate-700 flex flex-col items-end">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">Acknowledged by:</span>
+                            <span>${teacherName}</span>
+                            <span class="text-[9px] text-slate-400 font-medium">${ackDate}</span>
+                        </div>
+                        ${isAdmin ? `
+                        <button onclick="deleteSubmission(${sub.id})" 
+                                class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="Delete submission">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        ` : ''}
                     </div>
                 `;
             }
@@ -6515,6 +6552,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 sub.status = 'acknowledged';
                 sub.acknowledged_by = { id: 999, full_name: currentUser ? currentUser.full_name : "Teacher", role: "TEACHER" };
                 sub.acknowledged_at = new Date().toISOString();
+                
+                // Write updated list to localStorage
+                localStorage.setItem('simulated_feedback_submissions', JSON.stringify(feedbackSubmissionsList));
+                
                 showToast(`Feedback acknowledged by ${sub.acknowledged_by.full_name} at ${new Date().toLocaleTimeString('en-MY')}`, 'success');
                 renderFeedbackSubmissions();
             }
@@ -6536,6 +6577,39 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 console.error("Acknowledge error:", err);
                 showToast("Network error during acknowledgement", "error");
+            }
+        }
+    }
+
+    async function deleteSubmission(subId) {
+        if (!confirm("Are you sure you want to delete this feedback submission? This action cannot be undone.")) {
+            return;
+        }
+        
+        showToast('Deleting feedback submission...', 'info');
+        if (isSimulated) {
+            const index = feedbackSubmissionsList.findIndex(s => s.id === subId);
+            if (index !== -1) {
+                feedbackSubmissionsList.splice(index, 1);
+                localStorage.setItem('simulated_feedback_submissions', JSON.stringify(feedbackSubmissionsList));
+                showToast("Feedback submission deleted", "success");
+                renderFeedbackSubmissions();
+            }
+        } else {
+            try {
+                const res = await authFetch(`${API_BASE}/merit/submissions/${subId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    showToast("Feedback submission deleted successfully", "success");
+                    loadFeedbackSubmissions();
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || "Failed to delete feedback submission", "error");
+                }
+            } catch (err) {
+                console.error("Delete submission error:", err);
+                showToast("Network error during deletion", "error");
             }
         }
     }
@@ -7658,6 +7732,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Feedback Submissions
     window.loadFeedbackSubmissions = loadFeedbackSubmissions;
     window.acknowledgeSubmission = acknowledgeSubmission;
+    window.deleteSubmission = deleteSubmission;
     window.openLightboxModal = openLightboxModal;
     window.closeLightboxModal = closeLightboxModal;
 

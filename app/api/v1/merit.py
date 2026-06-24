@@ -124,3 +124,14 @@ def acknowledge_feedback_submission(
         submission_id=submission_id,
         user_id=current_user.id
     )
+
+
+@router.delete("/submissions/{submission_id}")
+def delete_feedback_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin)
+):
+    merit_service.delete_feedback_submission(db, submission_id)
+    return {"message": "Feedback submission deleted"}
+

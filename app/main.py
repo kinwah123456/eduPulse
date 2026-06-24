@@ -42,10 +42,13 @@ async def lifespan(app: FastAPI):
     # Run automatic cleanup on startup (remove assessments not used/updated in 3 months)
     from app.core.database import SessionLocal
     from app.services.grading_service import cleanup_inactive_assessments
+    from app.services.merit_service import cleanup_expired_feedback_submissions
     db = SessionLocal()
     try:
         deleted = cleanup_inactive_assessments(db)
         print(f"Cleanup: removed {deleted} inactive assessments.")
+        deleted_feedback = cleanup_expired_feedback_submissions(db)
+        print(f"Cleanup: removed {deleted_feedback} expired feedback submissions.")
     except Exception as e:
         print(f"Cleanup failed: {e}")
         

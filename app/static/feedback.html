@@ -418,6 +418,56 @@
 
                 if (response.ok) {
                     showToast("Feedback submitted successfully. Thank you!", "success");
+                    
+                    try {
+                        const data = await response.json();
+                        let simulatedSubs = localStorage.getItem('simulated_feedback_submissions');
+                        let list = [];
+                        if (simulatedSubs) {
+                            list = JSON.parse(simulatedSubs);
+                        } else {
+                            list = [
+                                {
+                                    id: 101,
+                                    is_anonymous: true,
+                                    identity_card_number: null,
+                                    description: "Witnessed senior student bullying a junior behind the canteen during recess.",
+                                    location: "Canteen",
+                                    images: ["/static/assets/education_hero.png"],
+                                    status: "unread",
+                                    acknowledged_by_id: null,
+                                    acknowledged_at: null,
+                                    student_id: null,
+                                    created_at: new Date(Date.now() - 3600000).toISOString()
+                                },
+                                {
+                                    id: 102,
+                                    is_anonymous: false,
+                                    identity_card_number: "120101-14-1111",
+                                    description: "Complain about toilet cleanliness on Block B level 3. The pipes are leaking.",
+                                    location: "Block B Level 3",
+                                    images: [],
+                                    status: "acknowledged",
+                                    acknowledged_by_id: 999,
+                                    acknowledged_at: new Date().toISOString(),
+                                    student_id: 1,
+                                    student: { id: 1, full_name: "Muhammad Ali Bin Hassan", student_id_number: "S2001" },
+                                    acknowledged_by: { id: 999, full_name: "Noraini Binti Abdullah", role: "TEACHER" },
+                                    created_at: new Date(Date.now() - 7200000).toISOString()
+                                }
+                            ];
+                        }
+                        
+                        // Filter out entries older than 365 days
+                        const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
+                        list = list.filter(sub => new Date(sub.created_at).getTime() >= oneYearAgo);
+                        
+                        list.unshift(data);
+                        localStorage.setItem('simulated_feedback_submissions', JSON.stringify(list));
+                    } catch (e) {
+                        console.error("Failed to sync submission to localStorage:", e);
+                    }
+
                     // Stop camera if running
                     stopCamera();
                     // Reset form
