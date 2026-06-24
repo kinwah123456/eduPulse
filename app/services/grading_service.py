@@ -60,7 +60,7 @@ def delete_assessment(db: Session, assessment_id: int) -> None:
     db.commit()
 
 
-async def grade_submission(db: Session, data: dict) -> StudentGrade:
+async def grade_submission(db: Session, data: dict, background_tasks: any = None) -> StudentGrade:
     # Verify student exists
     student = db.query(Student).filter(Student.id == data["student_id"]).first()
     if not student:
@@ -142,8 +142,12 @@ async def grade_submission(db: Session, data: dict) -> StudentGrade:
         
         # Trigger grade notifications (safely)
         try:
-            from app.services.notification_service import trigger_grade_notifications
-            trigger_grade_notifications(db, existing_grade)
+            if background_tasks:
+                from app.services.notification_service import trigger_grade_notifications_background
+                background_tasks.add_task(trigger_grade_notifications_background, existing_grade.id)
+            else:
+                from app.services.notification_service import trigger_grade_notifications
+                trigger_grade_notifications(db, existing_grade)
         except Exception as e:
             print(f"Failed to trigger grade notifications: {e}")
             
@@ -163,12 +167,17 @@ async def grade_submission(db: Session, data: dict) -> StudentGrade:
         
         # Trigger grade notifications (safely)
         try:
-            from app.services.notification_service import trigger_grade_notifications
-            trigger_grade_notifications(db, new_grade)
+            if background_tasks:
+                from app.services.notification_service import trigger_grade_notifications_background
+                background_tasks.add_task(trigger_grade_notifications_background, new_grade.id)
+            else:
+                from app.services.notification_service import trigger_grade_notifications
+                trigger_grade_notifications(db, new_grade)
         except Exception as e:
             print(f"Failed to trigger grade notifications: {e}")
             
         return new_grade
+
 
 
 def get_student_grade(db: Session, grade_id: int) -> StudentGrade:
@@ -352,5 +361,49 @@ def process_batch_zip(db: Session, zip_bytes: bytes, class_id: int, assessment_i
             res["status"] = "Verification Required"
             
     return results
+
+
+def delete_temp_submission(session_id: str) -> None:
+    """Safely delete a temporary submission directory by session ID."""
+    import os
+    import shutil
+    import re
+    
+    if not session_id or not session_id.strip():
+        return
+        
+    # Prevent path traversal by strictly validating UUID/alphanumeric format
+    if not re.match(r"^[a-zA-Z0-9\-]+$", session_id):
+        raise ValueError("Invalid session ID format")
+        
+    path = os.path.join("app", "static", "temp_submissions", session_id)
+    if os.path.exists(path) and os.path.isdir(path):
+        try:
+            shutil.rmtree(path)
+        except Exception as e:
+            print(f"[Storage Cleanup] Error deleting directory {path}: {e}")
+
+
+def cleanup_expired_temp_submissions(max_age_seconds: int = 86400) -> None:
+    """Delete any temporary submission directories older than max_age_seconds (default 24h)."""
+    import os
+    import shutil
+    import time
+    
+    temp_dir = os.path.join("app", "static", "temp_submissions")
+    if not os.path.exists(temp_dir):
+        return
+        
+    now = time.time()
+    for entry in os.scandir(temp_dir):
+        if entry.is_dir():
+            # Check the directory's last modified time
+            if now - entry.stat().st_mtime > max_age_seconds:
+                try:
+                    shutil.rmtree(entry.path)
+                    print(f"[Storage Cleanup] Cleaned up expired OMR directory: {entry.name}")
+                except Exception as e:
+                    print(f"[Storage Cleanup] Failed to delete {entry.path}: {e}")
+
 
 

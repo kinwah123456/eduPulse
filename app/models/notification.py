@@ -40,9 +40,9 @@ class NotificationLog(Base):
     __tablename__ = "notification_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
-    student_name: Mapped[str] = mapped_column(String(255))
-    parent_contact: Mapped[str] = mapped_column(String(255))
+    student_id: Mapped[Optional[int]] = mapped_column(ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True)
+    student_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    parent_contact: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     channel: Mapped[str] = mapped_column(String(50))  # "EMAIL" or "WHATSAPP"
     event_type: Mapped[str] = mapped_column(String(50))  # "student_absent", "assignment_failed"
     message_body: Mapped[str] = mapped_column(Text)

@@ -6075,7 +6075,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function switchMeritSubTab(tabName) {
-        const tabs = ['roster', 'logs', 'rules'];
+        const tabs = ['roster', 'inbox', 'logs', 'rules'];
         tabs.forEach(t => {
             const btn = document.getElementById(`btn-tab-merit-${t}`);
             const view = document.getElementById(`sub-view-merit-${t}`);
@@ -6091,6 +6091,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+        if (tabName === 'inbox') {
+            loadFeedbackSubmissions();
+        }
     }
 
     function updateAndRenderMeritAll() {
@@ -6353,6 +6356,206 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                 </tr>`;
         });
+    }
+
+    let feedbackSubmissionsList = [];
+
+    async function loadFeedbackSubmissions() {
+        if (isSimulated) {
+            feedbackSubmissionsList = [
+                {
+                    id: 101,
+                    is_anonymous: true,
+                    identity_card_number: null,
+                    description: "Witnessed senior student bullying a junior behind the canteen during recess.",
+                    location: "Canteen",
+                    images: ["/static/assets/education_hero.png"],
+                    status: "unread",
+                    acknowledged_by_id: null,
+                    acknowledged_at: null,
+                    student_id: null,
+                    created_at: new Date(Date.now() - 3600000).toISOString()
+                },
+                {
+                    id: 102,
+                    is_anonymous: false,
+                    identity_card_number: "120101-14-1111",
+                    description: "Complain about toilet cleanliness on Block B level 3. The pipes are leaking.",
+                    location: "Block B Level 3",
+                    images: [],
+                    status: "acknowledged",
+                    acknowledged_by_id: 999,
+                    acknowledged_at: new Date().toISOString(),
+                    student_id: 1,
+                    student: { id: 1, full_name: "Muhammad Ali Bin Hassan", student_id_number: "S2001" },
+                    acknowledged_by: { id: 999, full_name: "Noraini Binti Abdullah", role: "TEACHER" },
+                    created_at: new Date(Date.now() - 7200000).toISOString()
+                }
+            ];
+            renderFeedbackSubmissions();
+        } else {
+            try {
+                const res = await authFetch(`${API_BASE}/merit/submissions`);
+                if (res.ok) {
+                    feedbackSubmissionsList = await res.json();
+                }
+                renderFeedbackSubmissions();
+            } catch (error) {
+                console.error("Error loading feedback submissions:", error);
+                showToast("Failed to fetch feedback submissions", "error");
+            }
+        }
+    }
+
+    function renderFeedbackSubmissions() {
+        const tableBody = document.getElementById('merit-inbox-table-body');
+        if (!tableBody) return;
+
+        if (feedbackSubmissionsList.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="py-8 text-center text-slate-400">No feedback submissions found.</td>
+                </tr>`;
+            return;
+        }
+
+        tableBody.innerHTML = '';
+        feedbackSubmissionsList.forEach(sub => {
+            const dateStr = new Date(sub.created_at).toLocaleString('en-MY', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            const location = sub.location || 'General';
+
+            let submitterText = '';
+            if (sub.is_anonymous) {
+                submitterText = `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                    <i class="fas fa-user-secret text-[10px]"></i> Anonymous
+                </span>`;
+            } else if (sub.student) {
+                submitterText = `
+                    <div class="font-semibold text-slate-800">${sub.student.full_name}</div>
+                    <div class="text-[10px] text-slate-400 font-medium">Student ID: ${sub.student.student_id_number}</div>
+                    <div class="text-[10px] text-slate-400 font-medium">IC: ${sub.identity_card_number}</div>
+                `;
+            } else {
+                submitterText = `
+                    <div class="font-semibold text-rose-700">IC (Unregistered)</div>
+                    <div class="text-[10px] text-slate-500 font-semibold">${sub.identity_card_number}</div>
+                `;
+            }
+
+            let evidenceHtml = '<span class="text-xs text-slate-400">No attachments</span>';
+            if (sub.images && sub.images.length > 0) {
+                evidenceHtml = '<div class="flex flex-wrap gap-1.5">';
+                sub.images.forEach(imgUrl => {
+                    evidenceHtml += `
+                        <img src="${imgUrl}" onclick="openLightboxModal('${imgUrl}')" 
+                             class="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-zoom-in hover:scale-105 transition-all" 
+                             title="Click to view full size">
+                    `;
+                });
+                evidenceHtml += '</div>';
+            }
+
+            const isUnread = sub.status === 'unread';
+            const statusBadge = isUnread 
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                    <i class="fas fa-circle text-[6px]"></i> Unread
+                   </span>`
+                : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <i class="fas fa-circle-check"></i> Acknowledged
+                   </span>`;
+
+            let actionHtml = '';
+            if (isUnread) {
+                actionHtml = `
+                    <button onclick="acknowledgeSubmission(${sub.id})" 
+                            class="px-3 py-1.5 bg-brand-teal hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-brand-teal/10 cursor-pointer">
+                        Acknowledge
+                    </button>
+                `;
+            } else {
+                const teacherName = sub.acknowledged_by ? sub.acknowledged_by.full_name : 'Teacher';
+                const ackDate = sub.acknowledged_at ? new Date(sub.acknowledged_at).toLocaleString('en-MY', {
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                }) : '';
+                actionHtml = `
+                    <div class="text-xs font-semibold text-slate-700 flex flex-col items-end">
+                        <span class="text-[10px] text-slate-400 font-bold uppercase">Acknowledged by:</span>
+                        <span>${teacherName}</span>
+                        <span class="text-[9px] text-slate-400 font-medium">${ackDate}</span>
+                    </div>
+                `;
+            }
+
+            tableBody.innerHTML += `
+                <tr class="hover:bg-slate-50/50 transition-colors duration-150">
+                    <td class="py-4 px-6 text-sm text-slate-500 font-medium">${dateStr}</td>
+                    <td class="py-4 px-6 text-sm font-semibold text-slate-700">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs">
+                            <i class="fas fa-location-dot text-[10px]"></i> ${location}
+                        </span>
+                    </td>
+                    <td class="py-4 px-6 text-sm">${submitterText}</td>
+                    <td class="py-4 px-6 text-sm text-slate-600 leading-relaxed font-medium max-w-xs break-words">${sub.description}</td>
+                    <td class="py-4 px-6 text-sm">${evidenceHtml}</td>
+                    <td class="py-4 px-6 text-sm">${statusBadge}</td>
+                    <td class="py-4 px-6 text-sm text-right">${actionHtml}</td>
+                </tr>`;
+        });
+    }
+
+    async function acknowledgeSubmission(subId) {
+        showToast('Acknowledging feedback...', 'info');
+        if (isSimulated) {
+            const sub = feedbackSubmissionsList.find(s => s.id === subId);
+            if (sub) {
+                sub.status = 'acknowledged';
+                sub.acknowledged_by = { id: 999, full_name: currentUser ? currentUser.full_name : "Teacher", role: "TEACHER" };
+                sub.acknowledged_at = new Date().toISOString();
+                showToast(`Feedback acknowledged by ${sub.acknowledged_by.full_name} at ${new Date().toLocaleTimeString('en-MY')}`, 'success');
+                renderFeedbackSubmissions();
+            }
+        } else {
+            try {
+                const res = await authFetch(`${API_BASE}/merit/submissions/${subId}/acknowledge`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    const teacherName = updated.acknowledged_by ? updated.acknowledged_by.full_name : 'Teacher';
+                    const timeStr = new Date(updated.acknowledged_at).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
+                    showToast(`Feedback acknowledged by ${teacherName} at ${timeStr}`, 'success');
+                    loadFeedbackSubmissions();
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || "Failed to acknowledge submission", "error");
+                }
+            } catch (err) {
+                console.error("Acknowledge error:", err);
+                showToast("Network error during acknowledgement", "error");
+            }
+        }
+    }
+
+    function openLightboxModal(src) {
+        const modal = document.getElementById('image-lightbox-modal');
+        const img = document.getElementById('lightbox-image');
+        const caption = document.getElementById('lightbox-caption');
+        if (modal && img) {
+            img.src = src;
+            if (caption) caption.textContent = src.substring(src.lastIndexOf('/') + 1);
+            modal.classList.remove('hidden');
+        }
+    }
+
+    function closeLightboxModal() {
+        const modal = document.getElementById('image-lightbox-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
     }
 
     function openAwardPointsModal(studentId) {
@@ -7451,6 +7654,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.retryNotificationLog = retryNotificationLog;
     window.loadNotificationLogs = loadNotificationLogs;
     window.loadNotificationsViewData = loadNotificationsViewData;
+    
+    // Feedback Submissions
+    window.loadFeedbackSubmissions = loadFeedbackSubmissions;
+    window.acknowledgeSubmission = acknowledgeSubmission;
+    window.openLightboxModal = openLightboxModal;
+    window.closeLightboxModal = closeLightboxModal;
 
     // =========================================================================
     // LOGOUT

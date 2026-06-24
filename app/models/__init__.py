@@ -8,7 +8,7 @@ from app.models.academic import Subject, SchoolClass
 from app.models.attendance import AttendanceSession, AttendanceRecord
 from app.models.schedule import TimeSlot, Timetable, ScheduleEntry
 from app.models.grading import Assessment, StudentGrade
-from app.models.merit import MeritOption, MeritLog
+from app.models.merit import MeritOption, MeritLog, MeritSubmission
 from app.models.notification import NotificationConnector, NotificationRule, NotificationLog
 
 __all__ = [
@@ -27,6 +27,7 @@ __all__ = [
     "StudentGrade",
     "MeritOption",
     "MeritLog",
+    "MeritSubmission",
     "NotificationConnector",
     "NotificationRule",
     "NotificationLog",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -8,7 +8,7 @@ from app.dependencies import get_current_user, require_admin, require_teacher_or
 from app.models.user import User
 from app.schemas.merit import (
     MeritOptionCreate, MeritOptionUpdate, MeritOptionResponse,
-    MeritAwardRequest, MeritLogResponse
+    MeritAwardRequest, MeritLogResponse, MeritSubmissionResponse
 )
 from app.services import merit_service
 
@@ -84,3 +84,43 @@ def delete_merit_log(
 ):
     merit_service.delete_merit_log(db, log_id)
     return {"message": "Merit log entry deleted"}
+
+
+@router.post("/submissions", response_model=MeritSubmissionResponse)
+def create_feedback_submission(
+    is_anonymous: bool = Form(...),
+    identity_card_number: str | None = Form(None),
+    description: str = Form(...),
+    location: str | None = Form(None),
+    images: list[UploadFile] | None = File(None),
+    db: Session = Depends(get_db)
+):
+    return merit_service.create_feedback_submission(
+        db,
+        is_anonymous=is_anonymous,
+        identity_card_number=identity_card_number,
+        description=description,
+        location=location,
+        uploaded_files=images
+    )
+
+
+@router.get("/submissions", response_model=list[MeritSubmissionResponse])
+def list_feedback_submissions(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_teacher_or_admin)
+):
+    return merit_service.get_feedback_submissions(db)
+
+
+@router.post("/submissions/{submission_id}/acknowledge", response_model=MeritSubmissionResponse)
+def acknowledge_feedback_submission(
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin)
+):
+    return merit_service.acknowledge_feedback_submission(
+        db,
+        submission_id=submission_id,
+        user_id=current_user.id
+    )

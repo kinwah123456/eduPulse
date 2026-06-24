@@ -75,6 +75,20 @@ def seed_notifications(db: Session) -> None:
             "template": "Dear Parent, your child {student_name} scored {score}/{max_points} on '{assignment_title}' (below the passing mark of {passing_threshold}%).",
             "is_enabled": False,
             "passing_threshold": 50.0
+        },
+        {
+            "event_type": "feedback_submitted",
+            "connector_type": "email",
+            "template": "A new feedback submission has been received on {datetime}. Location: {location}. Identified As: {identification}. Description: {description}",
+            "is_enabled": False,
+            "passing_threshold": None
+        },
+        {
+            "event_type": "feedback_submitted",
+            "connector_type": "whatsapp",
+            "template": "New feedback received on {datetime} at {location}. Identified As: {identification}. Description: {description}",
+            "is_enabled": False,
+            "passing_threshold": None
         }
     ]
 
@@ -515,3 +529,111 @@ def retry_notification(db: Session, log_id: int) -> NotificationLog:
     db.commit()
     db.refresh(log)
     return log
+
+
+def trigger_attendance_notifications_background(attendance_session_id: int) -> None:
+    """Background task to fetch attendance session and trigger notifications safely under a new DB session."""
+    from app.core.database import SessionLocal
+    from app.models.attendance import AttendanceSession
+    
+    db = SessionLocal()
+    try:
+        session = db.query(AttendanceSession).filter(AttendanceSession.id == attendance_session_id).first()
+        if session:
+            trigger_attendance_notifications(db, session)
+    except Exception as e:
+        print(f"[Background Notifications] Failed to trigger attendance notifications for session {attendance_session_id}: {e}")
+    finally:
+        db.close()
+
+
+def trigger_grade_notifications_background(grade_id: int) -> None:
+    """Background task to fetch student grade and trigger notifications safely under a new DB session."""
+    from app.core.database import SessionLocal
+    from app.models.grading import StudentGrade
+    
+    db = SessionLocal()
+    try:
+        grade = db.query(StudentGrade).filter(StudentGrade.id == grade_id).first()
+        if grade:
+            trigger_grade_notifications(db, grade)
+    except Exception as e:
+        print(f"[Background Notifications] Failed to trigger grade notifications for grade {grade_id}: {e}")
+    finally:
+        db.close()
+
+
+def trigger_feedback_notifications(db: Session, submission) -> None:
+    """Check active feedback rules and notify school admin/teachers."""
+    active_rules = db.query(NotificationRule).filter(
+        NotificationRule.event_type == "feedback_submitted",
+        NotificationRule.is_enabled == True
+    ).all()
+    
+    if not active_rules:
+        return
+        
+    from app.models.user import User
+    admin = db.query(User).filter(User.role == "ADMIN").first()
+    admin_email = admin.email if admin else "admin@school.local"
+    
+    student_name = "Anonymous"
+    if not submission.is_anonymous:
+        if submission.student:
+            student_name = submission.student.full_name
+        else:
+            student_name = f"Unregistered IC ({submission.identity_card_number})"
+            
+    dt_str = submission.created_at.strftime("%d/%m/%Y %I:%M %p") if submission.created_at else datetime.now().strftime("%d/%m/%Y %I:%M %p")
+    
+    for rule in active_rules:
+        conn_type = rule.connector_type.lower()
+        connector = db.query(NotificationConnector).filter(
+            NotificationConnector.name == conn_type
+        ).first()
+        
+        if not connector or not connector.is_enabled:
+            continue
+            
+        try:
+            config = json.loads(connector.config)
+        except Exception:
+            continue
+            
+        recipient = admin_email
+        if conn_type == "whatsapp":
+            recipient = config.get("sender_number", "+6012-3456789")
+            
+        message_body = (
+            rule.template
+            .replace("{datetime}", dt_str)
+            .replace("{location}", submission.location or "General")
+            .replace("{identification}", student_name)
+            .replace("{description}", submission.description)
+        )
+        
+        status = "SENT"
+        error_msg = None
+        try:
+            if conn_type == "email":
+                send_email(config, recipient, "New Feedback Submission Received", message_body)
+            elif conn_type == "whatsapp":
+                send_whatsapp(config, recipient, message_body)
+        except Exception as e:
+            status = "FAILED"
+            error_msg = str(e)
+            
+        log = NotificationLog(
+            student_id=submission.student_id,
+            student_name=submission.student.full_name if submission.student else student_name,
+            parent_contact=recipient,
+            channel=conn_type.upper(),
+            event_type="feedback_submitted",
+            message_body=message_body,
+            status=status,
+            error_message=error_msg,
+            reference_id=submission.id
+        )
+        db.add(log)
+    db.commit()
+

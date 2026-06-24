@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPulse — School Feedback Submission</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Submit feedback or report school relevant topics. Easy, safe, and anonymous options available.">
+    <meta name="theme-color" content="#0d9488">
+
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Theme Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            deep: '#0f172a',
+                            teal: '#0d9488',
+                            green: '#10b981',
+                            sage: '#86efac',
+                            slate: '#f8fafc',
+                            accent: '#f0fdfa'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="h-full font-sans antialiased text-slate-800 flex flex-col min-h-screen">
+
+    <!-- Toast Notification -->
+    <div id="toast" role="status" aria-live="polite" class="fixed top-4 right-4 z-50 p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 opacity-0 pointer-events-none flex items-center gap-3">
+        <div class="toast-icon"></div>
+        <div id="toast-message" class="text-sm font-medium"></div>
+    </div>
+
+    <!-- Header Section -->
+    <header class="bg-white border-b border-slate-100 py-4 px-6 shadow-sm sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-brand-teal to-brand-green p-2 rounded-xl shadow-md shadow-teal-500/10">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-slate-900 text-lg font-bold tracking-tight">EduPulse <span class="text-brand-teal">Ops</span></h1>
+                    <p class="text-slate-400 text-[10px] tracking-wider uppercase font-semibold">Public Feedback Form</p>
+                </div>
+            </div>
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider" id="current-time-display">
+                --
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 md:p-8 flex flex-col justify-center">
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
+            <!-- Alert banner for location tracking -->
+            <div id="location-banner" class="bg-teal-50 border-b border-teal-100 px-6 py-4 flex items-center justify-between hidden">
+                <div class="flex items-center gap-3">
+                    <div class="bg-brand-teal/10 text-brand-teal p-2 rounded-lg">
+                        <i class="fas fa-location-dot text-base"></i>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold text-teal-600 uppercase tracking-wider">Scanned Location</div>
+                        <div class="text-sm font-semibold text-teal-900" id="location-text">Loading location...</div>
+                    </div>
+                </div>
+                <span class="text-xs font-bold text-brand-teal bg-white px-2.5 py-1 rounded-full border border-teal-200">Tracked</span>
+            </div>
+
+            <!-- Form Content -->
+            <div class="p-6 sm:p-8 space-y-6">
+                <div class="border-b border-slate-100 pb-4">
+                    <h2 class="text-2xl font-bold text-slate-900">Feedback & Incident Submission</h2>
+                    <p class="text-slate-500 text-sm mt-1">Submit feedback regarding bullying, skipping class, or any school-related topics. Anonymous option available.</p>
+                </div>
+
+                <form id="feedback-form" class="space-y-6" onsubmit="submitForm(event)">
+                    <!-- Hidden Location input -->
+                    <input type="hidden" id="location-input" name="location" value="">
+
+                    <!-- Step 1: Identity Option -->
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Submission Mode</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Anonymous Card -->
+                            <div onclick="selectMode(true)" id="mode-anonymous" 
+                                 class="cursor-pointer border-2 border-brand-teal bg-teal-50/20 rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative">
+                                <div class="flex justify-between items-start">
+                                    <div class="bg-brand-teal/10 text-brand-teal p-2 rounded-xl">
+                                        <i class="fas fa-user-secret text-lg"></i>
+                                    </div>
+                                    <span class="dot w-4 h-4 rounded-full border-4 border-brand-teal bg-white flex items-center justify-center"></span>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-800">Submit Anonymously</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">Your identity is completely hidden.</p>
+                                </div>
+                            </div>
+
+                            <!-- Identified Card -->
+                            <div onclick="selectMode(false)" id="mode-identified" 
+                                 class="cursor-pointer border border-slate-200 bg-white rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative">
+                                <div class="flex justify-between items-start">
+                                    <div class="bg-slate-100 text-slate-600 p-2 rounded-xl" id="identified-icon-box">
+                                        <i class="fas fa-address-card text-lg"></i>
+                                    </div>
+                                    <span class="dot w-4 h-4 rounded-full border border-slate-300 bg-white flex items-center justify-center" id="identified-dot"></span>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-800">Identify Myself</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">Provide IC to link to student account.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Identification Card Number (Visible only if not anonymous) -->
+                    <div id="ic-field-container" class="space-y-1.5 hidden">
+                        <label for="ic-input" class="block text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            Identification Card (IC) Number <span class="text-rose-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <i class="fas fa-address-card absolute left-3 top-3.5 text-slate-400 text-sm"></i>
+                            <input type="text" id="ic-input" name="identity_card_number" placeholder="e.g. 120101-14-1111"
+                                   class="w-full pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all">
+                        </div>
+                        <p class="text-[10px] text-slate-400">Must enter a valid identity card format (e.g. YYMMDD-PB-### or alphanumeric ID).</p>
+                    </div>
+
+                    <!-- Step 3: Description (Compulsory) -->
+                    <div class="space-y-1.5">
+                        <label for="description-input" class="block text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            Describe the Issue / Feedback <span class="text-rose-500">*</span>
+                        </label>
+                        <textarea id="description-input" name="description" rows="4" required placeholder="Describe what happened. Include date, time, people involved, or any details to help teachers understand..."
+                                  class="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition-all resize-none"></textarea>
+                    </div>
+
+                    <!-- Step 4: Capture/Upload Images -->
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Evidence / Media Attachments (Optional)</label>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- Camera Toggle Button -->
+                            <button type="button" onclick="toggleCamera()" class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                                <i class="fas fa-camera text-base text-brand-teal"></i>
+                                <span>Take Picture using Webcam</span>
+                            </button>
+
+                            <!-- File Upload Picker -->
+                            <label class="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer text-center">
+                                <i class="fas fa-file-arrow-up text-base text-brand-teal"></i>
+                                <span>Upload Multiple Images</span>
+                                <input type="file" id="file-uploader" multiple accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                            </label>
+                        </div>
+
+                        <!-- Live Camera Viewer -->
+                        <div id="camera-container" class="hidden bg-slate-900 rounded-2xl overflow-hidden p-4 flex flex-col items-center gap-3 border border-slate-800">
+                            <video id="video-preview" autoplay playsinline class="w-full max-w-sm rounded-lg bg-black aspect-video object-cover"></video>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="captureSnapshot()" class="px-4 py-2 bg-brand-teal hover:bg-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-brand-teal/10 cursor-pointer">
+                                    <i class="fas fa-circle-dot"></i> Capture Photo
+                                </button>
+                                <button type="button" onclick="stopCamera()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                                    Close Camera
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Attachment Previews -->
+                        <div id="preview-gallery" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 pt-2"></div>
+                    </div>
+
+                    <!-- Submission buttons -->
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
+                        <span class="text-xs text-slate-400 italic font-semibold">* Compulsory fields</span>
+                        <button type="submit" id="submit-btn" class="px-6 py-3 bg-brand-teal hover:bg-teal-700 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-brand-teal/20 cursor-pointer">
+                            <span>Submit Feedback</span>
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 font-medium mt-auto">
+        <div class="max-w-4xl mx-auto px-4">
+            &copy; 2026 EduPulse School System. Malaysia Public School Portal. Fully encrypted, secure public report intake.
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        let isAnonymous = true;
+        let webcamStream = null;
+        let capturedBlobs = []; // Array of files/blobs to upload
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Read location from URL query parameter
+            const params = new URLSearchParams(window.location.search);
+            const loc = params.get('loc') || params.get('location');
+            const banner = document.getElementById('location-banner');
+            const locText = document.getElementById('location-text');
+            const locInput = document.getElementById('location-input');
+
+            if (loc) {
+                const cleanLoc = decodeURIComponent(loc).trim();
+                locText.textContent = cleanLoc;
+                locInput.value = cleanLoc;
+                banner.classList.remove('hidden');
+            }
+
+            // Sync date time display
+            updateTime();
+            setInterval(updateTime, 1000);
+        });
+
+        function updateTime() {
+            const dateStr = new Date().toLocaleString('en-MY', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+            });
+            const display = document.getElementById('current-time-display');
+            if (display) display.textContent = dateStr;
+        }
+
+        function selectMode(anon) {
+            isAnonymous = anon;
+            const anonCard = document.getElementById('mode-anonymous');
+            const identCard = document.getElementById('mode-identified');
+            const icField = document.getElementById('ic-field-container');
+            const icInput = document.getElementById('ic-input');
+
+            if (anon) {
+                // Anonymous Selected
+                anonCard.className = "cursor-pointer border-2 border-brand-teal bg-teal-50/20 rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative";
+                anonCard.querySelector('.dot').className = "dot w-4 h-4 rounded-full border-4 border-brand-teal bg-white flex items-center justify-center";
+                
+                identCard.className = "cursor-pointer border border-slate-200 bg-white rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative";
+                document.getElementById('identified-icon-box').className = "bg-slate-100 text-slate-600 p-2 rounded-xl";
+                document.getElementById('identified-dot').className = "dot w-4 h-4 rounded-full border border-slate-300 bg-white flex items-center justify-center";
+                
+                icField.classList.add('hidden');
+                icInput.required = false;
+                icInput.value = "";
+            } else {
+                // Identified Selected
+                anonCard.className = "cursor-pointer border border-slate-200 bg-white rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative";
+                anonCard.querySelector('.dot').className = "dot w-4 h-4 rounded-full border border-slate-300 bg-white flex items-center justify-center";
+                
+                identCard.className = "cursor-pointer border-2 border-brand-teal bg-teal-50/20 rounded-2xl p-4 transition-all hover:shadow-md flex flex-col justify-between h-28 relative";
+                document.getElementById('identified-icon-box').className = "bg-brand-teal/10 text-brand-teal p-2 rounded-xl";
+                document.getElementById('identified-dot').className = "dot w-4 h-4 rounded-full border-4 border-brand-teal bg-white flex items-center justify-center";
+                
+                icField.classList.remove('hidden');
+                icInput.required = true;
+                icInput.focus();
+            }
+        }
+
+        // Camera capture functions
+        async function toggleCamera() {
+            const container = document.getElementById('camera-container');
+            const video = document.getElementById('video-preview');
+
+            if (webcamStream) {
+                stopCamera();
+                return;
+            }
+
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = webcamStream;
+                container.classList.remove('hidden');
+            } catch (err) {
+                console.error("Camera access failed:", err);
+                showToast("Could not access webcam/camera", "error");
+            }
+        }
+
+        function stopCamera() {
+            const container = document.getElementById('camera-container');
+            const video = document.getElementById('video-preview');
+
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+            video.srcObject = null;
+            container.classList.add('hidden');
+        }
+
+        function captureSnapshot() {
+            const video = document.getElementById('video-preview');
+            if (!webcamStream) return;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const file = new File([blob], `camera_${Date.now()}.png`, { type: 'image/png' });
+                    capturedBlobs.push(file);
+                    renderPreviews();
+                    showToast("Photo captured successfully", "success");
+                }
+            }, 'image/png');
+        }
+
+        // File list upload handler
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    capturedBlobs.push(file);
+                }
+            });
+            renderPreviews();
+            // Clear uploader input value to allow select same file again
+            event.target.value = '';
+        }
+
+        function removeFile(index) {
+            capturedBlobs.splice(index, 1);
+            renderPreviews();
+        }
+
+        function renderPreviews() {
+            const gallery = document.getElementById('preview-gallery');
+            gallery.innerHTML = '';
+
+            capturedBlobs.forEach((file, index) => {
+                const url = URL.createObjectURL(file);
+                const item = document.createElement('div');
+                item.className = "relative rounded-xl overflow-hidden aspect-square border border-slate-200 group bg-slate-100 flex items-center justify-center";
+                item.innerHTML = `
+                    <img src="${url}" class="w-full h-full object-cover">
+                    <button type="button" onclick="removeFile(${index})" class="absolute top-1 right-1 w-6 h-6 bg-rose-500 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-xs transition-all shadow shadow-black/20 opacity-90 hover:opacity-100 cursor-pointer">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                    <div class="absolute bottom-0 inset-x-0 bg-slate-950/60 py-0.5 text-[8px] text-center text-white truncate font-medium px-1">
+                        ${file.name}
+                    </div>
+                `;
+                gallery.appendChild(item);
+            });
+        }
+
+        async function submitForm(event) {
+            event.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const descInput = document.getElementById('description-input');
+            const icInput = document.getElementById('ic-input');
+            const locInput = document.getElementById('location-input');
+
+            // Form validation
+            if (!descInput.value.trim()) {
+                showToast("Please enter a description", "error");
+                return;
+            }
+
+            if (!isAnonymous && !icInput.value.trim()) {
+                showToast("Please enter your IC number", "error");
+                return;
+            }
+
+            // Set loading state
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin mr-1.5"></i> Submitting...`;
+
+            // Prepare multipart form data
+            const formData = new FormData();
+            formData.append('is_anonymous', isAnonymous);
+            formData.append('identity_card_number', isAnonymous ? '' : icInput.value.trim());
+            formData.append('description', descInput.value.trim());
+            formData.append('location', locInput.value.trim() || 'General');
+
+            // Append uploaded files
+            capturedBlobs.forEach(file => {
+                formData.append('images', file);
+            });
+
+            try {
+                const response = await fetch('/api/v1/merit/submissions', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    showToast("Feedback submitted successfully. Thank you!", "success");
+                    // Stop camera if running
+                    stopCamera();
+                    // Reset form
+                    descInput.value = '';
+                    icInput.value = '';
+                    capturedBlobs = [];
+                    renderPreviews();
+                } else {
+                    const data = await response.json();
+                    showToast(data.detail || "Submission failed", "error");
+                }
+            } catch (err) {
+                console.error("Submission error:", err);
+                showToast("Network error occurred during submission", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>Submit Feedback</span><i class="fas fa-paper-plane text-xs"></i>`;
+            }
+        }
+
+        // Elegant custom toast alerts
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            
+            toastMsg.textContent = message;
+            
+            // Remove previous classes
+            toast.className = "fixed top-4 right-4 z-50 p-4 rounded-xl shadow-xl transition-all duration-500 transform translate-y-0 opacity-100 flex items-center gap-3";
+            const iconBox = toast.querySelector('.toast-icon');
+            
+            if (type === 'success') {
+                toast.classList.add('bg-emerald-50', 'border', 'border-emerald-200', 'text-emerald-800');
+                iconBox.innerHTML = `<i class="fas fa-circle-check text-emerald-500 text-lg"></i>`;
+            } else if (type === 'error') {
+                toast.classList.add('bg-rose-50', 'border', 'border-rose-200', 'text-rose-800');
+                iconBox.innerHTML = `<i class="fas fa-circle-xmark text-rose-500 text-lg"></i>`;
+            } else {
+                toast.classList.add('bg-blue-50', 'border', 'border-blue-200', 'text-blue-800');
+                iconBox.innerHTML = `<i class="fas fa-circle-info text-blue-500 text-lg"></i>`;
+            }
+
+            // Hide toast after 4 seconds
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 4000);
+        }
+    </script>
+</body>
+</html>

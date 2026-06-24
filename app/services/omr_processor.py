@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 import asyncio
-import winocr
+from app.services.ocr_service import ocr_manager
 from PIL import Image
 
 def run_sync(coro):
@@ -41,10 +41,9 @@ def extract_student_from_header(image_path: str, db, class_id: int) -> tuple[int
             w, h = pil_img.size
             header_crop = pil_img.crop((0, 0, w, int(h * 0.22)))
             
-            # Run OCR using Windows Native OCR
-            print("[OMR OCR] Running Windows Native OCR on header crop...")
-            ocr_result = run_sync(winocr.recognize_pil(header_crop))
-            full_text = ocr_result.text if ocr_result else ""
+            # Run OCR using the platform-independent wrapper
+            print("[OMR OCR] Running platform-independent OCR on header crop...")
+            full_text = ocr_manager.recognize(header_crop)
             
         if not full_text:
             print("[OMR OCR] No text detected in header crop.")

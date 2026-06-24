@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -166,10 +166,40 @@ def update_assessment(
 @router.post("/grade", response_model=StudentGradeResponse)
 async def grade_submission(
     body: StudentGradeCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(require_teacher_or_admin)
 ):
-    return await grading_service.grade_submission(db, body.model_dump())
+    grade = await grading_service.grade_submission(db, body.model_dump(), background_tasks)
+    
+    warnings = []
+    from app.models.notification import NotificationRule
+    from app.models.student import Student
+    from app.models.grading import Assessment
+    from app.services.notification_service import resolve_parent_contact
+    
+    active_rules = db.query(NotificationRule).filter(
+        NotificationRule.event_type == "assignment_failed",
+        NotificationRule.is_enabled == True
+    ).all()
+    
+    if active_rules:
+        assessment = db.query(Assessment).filter(Assessment.id == grade.assessment_id).first()
+        student = db.query(Student).filter(Student.id == grade.student_id).first()
+        if assessment and student:
+            score_pct = (grade.score / assessment.max_points) * 100.0 if assessment.max_points > 0 else 0.0
+            for rule in active_rules:
+                passing_threshold = rule.passing_threshold if rule.passing_threshold is not None else 50.0
+                if score_pct < passing_threshold:
+                    conn_type = rule.connector_type
+                    if not resolve_parent_contact(student, conn_type):
+                        warnings.append(
+                            f"Parent/guardian contact details missing for {student.full_name} ({conn_type.upper()} academic alert failed)"
+                        )
+                        
+    resp = StudentGradeResponse.model_validate(grade)
+    resp.warnings = warnings
+    return resp
 
 
 @router.get("/grades", response_model=StudentGradeListResponse)
@@ -216,6 +246,7 @@ async def batch_upload(
 @router.post("/batch-confirm")
 async def batch_confirm(
     body: BatchGradeConfirmRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(require_teacher_or_admin)
 ):
@@ -227,12 +258,40 @@ async def batch_confirm(
             "student_response": item.student_response
         }
         try:
-            grade = await grading_service.grade_submission(db, grade_payload)
+            grade = await grading_service.grade_submission(db, grade_payload, background_tasks)
+            
+            # Check for warnings
+            warnings = []
+            from app.models.notification import NotificationRule
+            from app.models.student import Student
+            from app.models.grading import Assessment
+            from app.services.notification_service import resolve_parent_contact
+            
+            active_rules = db.query(NotificationRule).filter(
+                NotificationRule.event_type == "assignment_failed",
+                NotificationRule.is_enabled == True
+            ).all()
+            
+            if active_rules:
+                assessment = db.query(Assessment).filter(Assessment.id == grade.assessment_id).first()
+                student = db.query(Student).filter(Student.id == grade.student_id).first()
+                if assessment and student:
+                    score_pct = (grade.score / assessment.max_points) * 100.0 if assessment.max_points > 0 else 0.0
+                    for rule in active_rules:
+                        passing_threshold = rule.passing_threshold if rule.passing_threshold is not None else 50.0
+                        if score_pct < passing_threshold:
+                            conn_type = rule.connector_type
+                            if not resolve_parent_contact(student, conn_type):
+                                warnings.append(
+                                    f"Parent/guardian contact details missing for {student.full_name} ({conn_type.upper()} academic alert failed)"
+                                )
+                                
             results.append({
                 "student_id": item.student_id,
                 "status": "success",
                 "score": grade.score,
-                "grade_id": grade.id
+                "grade_id": grade.id,
+                "warnings": warnings
             })
         except Exception as e:
             results.append({
@@ -241,5 +300,13 @@ async def batch_confirm(
                 "detail": str(e)
             })
             
+    # Clean up temporary upload files if session_id is provided
+    if body.session_id:
+        try:
+            grading_service.delete_temp_submission(body.session_id)
+        except Exception as e:
+            print(f"Failed to clean up temp submissions for session {body.session_id}: {e}")
+            
     return {"message": "Batch grading completed", "results": results}
+
 

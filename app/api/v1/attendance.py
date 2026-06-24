@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -57,19 +57,49 @@ def update_record(record_id: int, body: AttendanceRecordUpdate, db: Session = De
 
 @router.post("/bulk", response_model=AttendanceSessionDetailResponse)
 def bulk_create(
-    body: BulkAttendanceCreate, db: Session = Depends(get_db),
+    body: BulkAttendanceCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
     """Create attendance session with all records in one request."""
     session_data = {"class_id": body.class_id, "date": body.date, "time_slot_id": body.time_slot_id, "method": body.method}
     records_data = [r.model_dump() for r in body.records]
-    session = attendance_service.create_bulk_attendance(db, session_data, records_data, current_user.id)
-    return attendance_service.get_session_with_records(db, session.id)
+    session = attendance_service.create_bulk_attendance(db, session_data, records_data, current_user.id, background_tasks)
+    
+    warnings = []
+    from app.models.notification import NotificationRule
+    from app.models.student import Student
+    from app.services.notification_service import resolve_parent_contact
+    
+    active_rules = db.query(NotificationRule).filter(
+        NotificationRule.event_type == "student_absent",
+        NotificationRule.is_enabled == True
+    ).all()
+    
+    if active_rules:
+        for r in records_data:
+            if r["status"].upper() == "ABSENT":
+                student = db.query(Student).filter(Student.id == r["student_id"]).first()
+                if student:
+                    for rule in active_rules:
+                        conn_type = rule.connector_type
+                        if not resolve_parent_contact(student, conn_type):
+                            warnings.append(
+                                f"Parent/guardian contact details missing for {student.full_name} ({conn_type.upper()} alert failed)"
+                            )
+                            
+    detail = attendance_service.get_session_with_records(db, session.id)
+    resp = AttendanceSessionDetailResponse.model_validate(detail)
+    resp.warnings = warnings
+    return resp
 
 
 @router.post("/ingest", response_model=AttendanceSessionDetailResponse)
 def ingest_attendance(
-    body: EdgeAttendanceIngest, db: Session = Depends(get_db),
+    body: EdgeAttendanceIngest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
     """Ingest attendance from edge devices using student ID numbers."""
@@ -87,5 +117,30 @@ def ingest_attendance(
                 "notes": rec.notes
             })
             
-    session = attendance_service.create_bulk_attendance(db, session_data, records_data, current_user.id)
-    return attendance_service.get_session_with_records(db, session.id)
+    session = attendance_service.create_bulk_attendance(db, session_data, records_data, current_user.id, background_tasks)
+    
+    warnings = []
+    from app.models.notification import NotificationRule
+    from app.services.notification_service import resolve_parent_contact
+    
+    active_rules = db.query(NotificationRule).filter(
+        NotificationRule.event_type == "student_absent",
+        NotificationRule.is_enabled == True
+    ).all()
+    
+    if active_rules:
+        for r in records_data:
+            if r["status"].upper() == "ABSENT":
+                student = db.query(Student).filter(Student.id == r["student_id"]).first()
+                if student:
+                    for rule in active_rules:
+                        conn_type = rule.connector_type
+                        if not resolve_parent_contact(student, conn_type):
+                            warnings.append(
+                                f"Parent/guardian contact details missing for {student.full_name} ({conn_type.upper()} alert failed)"
+                            )
+                            
+    detail = attendance_service.get_session_with_records(db, session.id)
+    resp = AttendanceSessionDetailResponse.model_validate(detail)
+    resp.warnings = warnings
+    return resp

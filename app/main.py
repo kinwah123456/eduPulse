@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -15,10 +16,28 @@ from app.core.exceptions import (
 from app.api.v1.router import api_v1_router
 
 
+async def temp_cleanup_loop():
+    """Background task to periodically clean up expired temporary submissions."""
+    from app.services.grading_service import cleanup_expired_temp_submissions
+    # Wait 60 seconds before first run to let startup finish
+    await asyncio.sleep(60)
+    while True:
+        try:
+            cleanup_expired_temp_submissions()
+        except Exception as e:
+            print(f"Error during expired OMR temp cleanup: {e}")
+        # Run every hour (3600 seconds)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: create tables and register engines. Shutdown: cleanup."""
     init_db()
+    
+    # Pre-initialize platform OCR
+    from app.services.ocr_service import ocr_manager
+    ocr_manager.initialize()
     
     # Run automatic cleanup on startup (remove assessments not used/updated in 3 months)
     from app.core.database import SessionLocal
@@ -48,7 +67,18 @@ async def lifespan(app: FastAPI):
     EngineRegistry.register(OMREngine())
     EngineRegistry.register(MathEngine())
     
+    # Start background cleanup task
+    cleanup_task = asyncio.create_task(temp_cleanup_loop())
+    
     yield
+    
+    # Cancel background cleanup task on shutdown
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+
 
 
 app = FastAPI(
@@ -115,6 +145,15 @@ def read_dashboard():
     import os
     dashboard_path = os.path.join("app", "static", "dashboard.html")
     with open(dashboard_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/feedback", response_class=HTMLResponse, tags=["UI"])
+def read_feedback():
+    """Serve the Public Feedback Form."""
+    import os
+    feedback_path = os.path.join("app", "static", "feedback.html")
+    with open(feedback_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 

@@ -71,6 +71,8 @@ class StudentGradeResponse(BaseModel):
     # Optional relationships
     student: StudentResponse | None = None
     assessment: AssessmentResponse | None = None
+    warnings: list[str] = []
+
 
 
 class StudentGradeListResponse(BaseModel):
@@ -86,4 +88,6 @@ class BatchGradeConfirmItem(BaseModel):
 class BatchGradeConfirmRequest(BaseModel):
     assessment_id: int
     grades: list[BatchGradeConfirmItem]
+    session_id: str | None = None
+
 

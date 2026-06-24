@@ -32,9 +32,10 @@ def test_seed_notifications(db_session: Session):
     assert any(c.name == "whatsapp" for c in connectors)
 
     rules = db_session.query(NotificationRule).all()
-    assert len(rules) == 4
+    assert len(rules) == 6
     assert any(r.event_type == "student_absent" and r.connector_type == "email" for r in rules)
     assert any(r.event_type == "assignment_failed" and r.connector_type == "whatsapp" for r in rules)
+    assert any(r.event_type == "feedback_submitted" and r.connector_type == "email" for r in rules)
 
 
 def test_update_connector(db_session: Session):
@@ -195,3 +196,128 @@ async def test_trigger_grade_notifications(mock_send_email, db_session: Session)
     assert logs[0].status == "SENT"
     assert logs[0].event_type == "assignment_failed"
     assert logs[0].reference_id == grade.id
+
+
+@patch("app.services.notification_service.send_email")
+def test_trigger_attendance_notifications_background(mock_send_email, db_session: Session):
+    # Enable email connector and rule
+    notification_service.update_connector(db_session, "email", {"is_enabled": True})
+    notification_service.update_rule(
+        db_session, "student_absent", "email",
+        {"is_enabled": True, "template": "Child {student_name} absent on {date}"}
+    )
+
+    # Setup mock data
+    from app.models.school import School
+    school = School(name="Test School 3", code="TS03")
+    db_session.add(school)
+    db_session.flush()
+
+    klass = SchoolClass(name="Class 1B", school_id=school.id, grade_level=1)
+    db_session.add(klass)
+    db_session.flush()
+
+    student = Student(
+        student_id_number="S1234",
+        full_name="John Doe 3",
+        class_id=klass.id,
+        school_id=school.id,
+        father_contact="father@test.com",
+    )
+    db_session.add(student)
+    db_session.flush()
+
+    session = AttendanceSession(
+        class_id=klass.id,
+        date=date(2026, 6, 22),
+        time_slot_id=None,
+        method="MANUAL"
+    )
+    db_session.add(session)
+    db_session.flush()
+
+    record = AttendanceRecord(
+        session_id=session.id,
+        student_id=student.id,
+        status="ABSENT",
+        notes="Fever"
+    )
+    db_session.add(record)
+    db_session.flush()
+
+    # Call background function directly by patching SessionLocal to return db_session
+    with patch("app.core.database.SessionLocal", return_value=db_session):
+        notification_service.trigger_attendance_notifications_background(session.id)
+
+    # Verify mock send was called
+    mock_send_email.assert_called_once()
+    args, kwargs = mock_send_email.call_args
+    assert args[1] == "father@test.com"
+
+
+@patch("app.services.notification_service.send_email")
+def test_trigger_grade_notifications_background(mock_send_email, db_session: Session):
+    # Enable email connector and rule
+    notification_service.update_connector(db_session, "email", {"is_enabled": True})
+    notification_service.update_rule(
+        db_session, "assignment_failed", "email",
+        {"is_enabled": True, "template": "Failed: {student_name} got {score}/{max_points}", "passing_threshold": 50.0}
+    )
+
+    # Setup mock data
+    from app.models.school import School
+    school = School(name="Test School 4", code="TS04")
+    db_session.add(school)
+    db_session.flush()
+
+    user = User(email="teacher4@school.com", hashed_password="hash", full_name="Cikgu Test 4", role="TEACHER")
+    db_session.add(user)
+    db_session.flush()
+
+    teacher = Teacher(user_id=user.id, employee_id="T004", full_name="Cikgu Test 4", school_id=school.id)
+    db_session.add(teacher)
+    db_session.flush()
+
+    subject = Subject(name="Math", code="M104", school_id=school.id)
+    db_session.add(subject)
+    db_session.flush()
+
+    student = Student(
+        student_id_number="S9999",
+        full_name="Jane Doe 4",
+        school_id=school.id,
+        father_contact="jane.parent@test.com"
+    )
+    db_session.add(student)
+    db_session.flush()
+
+    assessment = Assessment(
+        title="Math Midterm 4",
+        subject_id=subject.id,
+        teacher_id=teacher.id,
+        grading_type="MATH",
+        config="10",
+        max_points=100
+    )
+    db_session.add(assessment)
+    db_session.flush()
+
+    grade = StudentGrade(
+        student_id=student.id,
+        assessment_id=assessment.id,
+        student_response="4",
+        score=0.0,
+        status="COMPLETED"
+    )
+    db_session.add(grade)
+    db_session.flush()
+
+    # Call background function directly by patching SessionLocal to return db_session
+    with patch("app.core.database.SessionLocal", return_value=db_session):
+        notification_service.trigger_grade_notifications_background(grade.id)
+
+    # Verify mock send was called
+    mock_send_email.assert_called_once()
+    args, kwargs = mock_send_email.call_args
+    assert args[1] == "jane.parent@test.com"
+

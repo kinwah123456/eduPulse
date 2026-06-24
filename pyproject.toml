@@ -15,7 +15,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "opencv-python-headless>=4.8.0",
     "numpy>=1.24.0",
-    "winocr>=0.0.15",
+    "winocr>=0.0.15; sys_platform == 'win32'",
+    "easyocr>=1.7.1; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]

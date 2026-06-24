@@ -168,3 +168,113 @@ def test_merit_module_workflow(client: TestClient, db_session: Session):
     resp = client.get("/api/v1/merit/logs", headers=admin_headers)
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+def test_feedback_submission_workflow(client: TestClient, db_session: Session):
+    # Register Admin & Login
+    client.post("/api/v1/auth/register", json={
+        "email": "admin2@merit.local",
+        "password": "admin123",
+        "full_name": "Merit Admin 2",
+        "role": "ADMIN"
+    })
+    
+    resp = client.post("/api/v1/auth/login", data={
+        "username": "admin2@merit.local",
+        "password": "admin123"
+    })
+    token = resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Setup School & Student
+    resp = client.post("/api/v1/schools/", headers=headers, json={
+        "name": "SMK Test Feedback",
+        "code": "SMKTF",
+        "state": "Johor",
+        "district": "Muar"
+    })
+    school_id = resp.json()["id"]
+
+    resp = client.post("/api/v1/students/", headers=headers, json={
+        "student_id_number": "SF0001",
+        "full_name": "Siti Aminah",
+        "school_id": school_id,
+        "identity_card_number": "120202-01-2222"
+    })
+    student_id = resp.json()["id"]
+
+    # 1. Submit Feedback: Anonymous
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "true",
+        "description": "Witnessed someone smoking behind Block A.",
+        "location": "Block A"
+    })
+    assert resp.status_code == 200
+    anon_data = resp.json()
+    assert anon_data["is_anonymous"] is True
+    assert anon_data["identity_card_number"] is None
+    assert anon_data["description"] == "Witnessed someone smoking behind Block A."
+    assert anon_data["location"] == "Block A"
+    assert anon_data["status"] == "unread"
+    assert anon_data["student_id"] is None
+
+    # 2. Submit Feedback: Identified with registered IC
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "false",
+        "identity_card_number": "120202-01-2222",
+        "description": "Bullying incident at the field.",
+        "location": "Field"
+    })
+    assert resp.status_code == 200
+    ident_data = resp.json()
+    assert ident_data["is_anonymous"] is False
+    assert ident_data["identity_card_number"] == "120202-01-2222"
+    assert ident_data["student_id"] == student_id
+    assert ident_data["status"] == "unread"
+
+    # 3. Submit Feedback: Identified with unregistered IC
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "false",
+        "identity_card_number": "999999-99-9999",
+        "description": "Public feedback from visitor.",
+        "location": "Main Gate"
+    })
+    assert resp.status_code == 200
+    unreg_data = resp.json()
+    assert unreg_data["is_anonymous"] is False
+    assert unreg_data["identity_card_number"] == "999999-99-9999"
+    assert unreg_data["student_id"] is None
+    assert unreg_data["status"] == "unread"
+
+    # 4. Submit Feedback validation: Description compulsory
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "true",
+        "description": ""
+    })
+    assert resp.status_code == 422
+
+    # Submit Feedback validation: IC compulsory if not anonymous
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "false",
+        "description": "Bullying",
+        "identity_card_number": ""
+    })
+    assert resp.status_code == 422
+
+    # 5. List Submissions (requires authorization)
+    resp = client.get("/api/v1/merit/submissions")
+    assert resp.status_code == 401
+
+    resp = client.get("/api/v1/merit/submissions", headers=headers)
+    assert resp.status_code == 200
+    submissions = resp.json()
+    assert len(submissions) >= 3
+    
+    # 6. Acknowledge Submission
+    unread_sub_id = ident_data["id"]
+    resp = client.post(f"/api/v1/merit/submissions/{unread_sub_id}/acknowledge", headers=headers)
+    assert resp.status_code == 200
+    ack_data = resp.json()
+    assert ack_data["status"] == "acknowledged"
+    assert ack_data["acknowledged_by_id"] is not None
+    assert ack_data["acknowledged_by"]["full_name"] == "Merit Admin 2"

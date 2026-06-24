@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MeritOptionCreate(BaseModel):
@@ -59,3 +57,34 @@ class MeritLogResponse(BaseModel):
     student: StudentNameResponse | None = None
     user: UserNameResponse | None = None
     merit_option: MeritOptionResponse | None = None
+
+
+class MeritSubmissionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    is_anonymous: bool
+    identity_card_number: str | None = None
+    description: str
+    location: str | None = None
+    images: list[str] = []
+    status: str
+    acknowledged_by_id: int | None = None
+    acknowledged_at: datetime | None = None
+    student_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    # Nested relationships
+    student: StudentNameResponse | None = None
+    acknowledged_by: UserNameResponse | None = None
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def parse_images(cls, value):
+        import json
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except Exception:
+                return [value] if value else []
+        return value or []

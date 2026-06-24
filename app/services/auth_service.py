@@ -51,9 +51,13 @@ def register_user(
             school_id = first_school.id if first_school else 1
 
         if not employee_id:
-            employee_id = f"T{random.randint(1000, 9999)}"
+            max_teacher = db.query(Teacher).order_by(Teacher.id.desc()).first()
+            next_num = (max_teacher.id + 1) if max_teacher else 1
+            employee_id = f"T{1000 + next_num}"
             while db.query(Teacher).filter(Teacher.employee_id == employee_id).first():
-                employee_id = f"T{random.randint(1000, 9999)}"
+                next_num += 1
+                employee_id = f"T{1000 + next_num}"
+
 
         teacher = Teacher(
             employee_id=employee_id,

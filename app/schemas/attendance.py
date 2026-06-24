@@ -73,6 +73,8 @@ class AttendanceSessionDetailResponse(BaseModel):
     method: str
     created_at: datetime
     records: list[AttendanceRecordResponse] = []
+    warnings: list[str] = []
+
 
 
 # --- Edge Ingest ---

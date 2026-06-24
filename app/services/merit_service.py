@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import os
+import json
+import uuid
+from datetime import datetime
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
-from app.models.merit import MeritOption, MeritLog
+from app.models.merit import MeritOption, MeritLog, MeritSubmission
 from app.models.student import Student
+from app.models.user import User
 from app.core.exceptions import NotFoundException, ConflictException, ValidationException
 
 
@@ -86,3 +92,83 @@ def delete_merit_log(db: Session, log_id: int) -> None:
         raise NotFoundException(f"Merit log with id {log_id} not found")
     db.delete(log)
     db.commit()
+
+
+def create_feedback_submission(
+    db: Session,
+    is_anonymous: bool,
+    identity_card_number: str | None,
+    description: str,
+    location: str | None,
+    uploaded_files: list[UploadFile] | None = None
+) -> MeritSubmission:
+    if not description:
+        raise ValidationException("Description is compulsory")
+    if not is_anonymous and not identity_card_number:
+        raise ValidationException("Identity card number is compulsory if anonymous is not selected")
+
+    # Handle image uploads
+    saved_paths = []
+    if uploaded_files:
+        upload_dir = os.path.join("app", "static", "feedback_uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        for file in uploaded_files:
+            if not file.filename:
+                continue
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+                continue
+            unique_name = f"{uuid.uuid4()}{ext}"
+            file_path = os.path.join(upload_dir, unique_name)
+            content = file.file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+            saved_paths.append(f"/static/feedback_uploads/{unique_name}")
+
+    student_id = None
+    if not is_anonymous and identity_card_number:
+        student = db.query(Student).filter(Student.identity_card_number == identity_card_number).first()
+        if student:
+            student_id = student.id
+
+    submission = MeritSubmission(
+        is_anonymous=is_anonymous,
+        identity_card_number=identity_card_number if not is_anonymous else None,
+        description=description,
+        location=location,
+        images=json.dumps(saved_paths),
+        status="unread",
+        student_id=student_id
+    )
+    db.add(submission)
+    db.commit()
+    db.refresh(submission)
+
+    try:
+        from app.services.notification_service import trigger_feedback_notifications
+        trigger_feedback_notifications(db, submission)
+    except Exception as e:
+        print(f"Failed to trigger feedback notifications: {e}")
+
+    return submission
+
+
+def get_feedback_submissions(db: Session) -> list[MeritSubmission]:
+    return db.query(MeritSubmission).order_by(MeritSubmission.created_at.desc()).all()
+
+
+def acknowledge_feedback_submission(db: Session, submission_id: int, user_id: int) -> MeritSubmission:
+    submission = db.query(MeritSubmission).filter(MeritSubmission.id == submission_id).first()
+    if not submission:
+        raise NotFoundException(f"Feedback submission with id {submission_id} not found")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise NotFoundException(f"User with id {user_id} not found")
+
+    submission.status = "acknowledged"
+    submission.acknowledged_by_id = user.id
+    submission.acknowledged_at = datetime.now()
+    db.commit()
+    db.refresh(submission)
+    return submission

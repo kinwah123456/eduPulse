@@ -196,16 +196,15 @@ def test_automation_workflow(client: TestClient, db_session: Session):
     logs = db_session.query(MeritLog).all()
     assert len(logs) == 2
 
-    # ── Test 8: OCR File Upload (Mocked winocr) ──
-    # Mocking winocr.recognize_pil
-    ocr_response = AsyncMock()
-    ocr_response.text = (
+    # ── Test 8: OCR File Upload (Mocked ocr_manager) ──
+    # Mocking ocr_manager.recognize
+    ocr_text = (
         "student_id_number,merit_option_name,points,justification\n"
         "SA2001,Helping Teacher,10,Carried books\n"
     )
     
-    with patch("winocr.recognize_pil", new_callable=AsyncMock) as mock_rec:
-        mock_rec.return_value = ocr_response
+    with patch("app.api.v1.automation.ocr_manager.recognize") as mock_rec:
+        mock_rec.return_value = ocr_text
         
         # Open mock image bytes (create a valid 1x1 image using PIL)
         from PIL import Image as PILImage

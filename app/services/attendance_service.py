@@ -63,6 +63,7 @@ def update_attendance_record(db: Session, record_id: int, data: dict) -> Attenda
 def create_bulk_attendance(
     db: Session, session_data: dict, records_data: list[dict],
     recorded_by_id: int | None = None,
+    background_tasks: any = None,
 ) -> AttendanceSession:
     """Create or update an attendance session with all records in one transaction."""
     # Check if a session already exists for this class, date, and timeslot
@@ -99,12 +100,17 @@ def create_bulk_attendance(
 
     # Trigger attendance notifications (safely)
     try:
-        from app.services.notification_service import trigger_attendance_notifications
-        trigger_attendance_notifications(db, session)
+        if background_tasks:
+            from app.services.notification_service import trigger_attendance_notifications_background
+            background_tasks.add_task(trigger_attendance_notifications_background, session.id)
+        else:
+            from app.services.notification_service import trigger_attendance_notifications
+            trigger_attendance_notifications(db, session)
     except Exception as e:
         print(f"Failed to trigger attendance notifications: {e}")
 
     return session
+
 
 
 def get_session_with_records(db: Session, session_id: int) -> AttendanceSession:

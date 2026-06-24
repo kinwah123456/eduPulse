@@ -4,7 +4,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from PIL import Image
-import winocr
+from app.services.ocr_service import ocr_manager
 
 from app.core.database import get_db
 from app.dependencies import require_teacher_or_admin
@@ -75,10 +75,9 @@ async def upload_automation_file(
         # Run OCR
         try:
             img = Image.open(io.BytesIO(file_bytes))
-            ocr_result = run_sync(winocr.recognize_pil(img))
-            if not ocr_result or not ocr_result.text:
+            text_content = ocr_manager.recognize(img)
+            if not text_content:
                 raise HTTPException(status_code=400, detail="OCR processed the image but could not extract any text.")
-            text_content = ocr_result.text
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to process image OCR: {str(e)}")
     else:
