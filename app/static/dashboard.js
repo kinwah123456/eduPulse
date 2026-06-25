@@ -6434,7 +6434,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (feedbackSubmissionsList.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="py-8 text-center text-slate-400">No feedback submissions found.</td>
+                    <td colspan="6" class="py-8 text-center text-slate-400">No feedback submissions found.</td>
                 </tr>`;
             return;
         }
@@ -6466,13 +6466,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             }
 
-            let evidenceHtml = '<span class="text-xs text-slate-400">No attachments</span>';
+            let evidenceHtml = '';
             if (sub.images && sub.images.length > 0) {
-                evidenceHtml = '<div class="flex flex-wrap gap-1.5">';
+                evidenceHtml = '<div class="flex flex-wrap gap-2 mt-2.5">';
                 sub.images.forEach(imgUrl => {
                     evidenceHtml += `
                         <img src="${imgUrl}" onclick="openLightboxModal('${imgUrl}')" 
-                             class="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-zoom-in hover:scale-105 transition-all" 
+                             class="w-11 h-11 object-cover rounded-xl border border-slate-200 cursor-zoom-in hover:scale-105 transition-all shadow-sm" 
                              title="Click to view full size">
                     `;
                 });
@@ -6482,10 +6482,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const isUnread = sub.status === 'unread';
             const statusBadge = isUnread 
                 ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
-                    <i class="fas fa-circle text-[6px]"></i> Unread
+                     <i class="fas fa-circle text-[6px]"></i> Unread
                    </span>`
                 : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <i class="fas fa-circle-check"></i> Acknowledged
+                     <i class="fas fa-circle-check"></i> Acknowledged
                    </span>`;
 
             const isAdmin = currentUser && currentUser.role === 'ADMIN';
@@ -6536,8 +6536,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         </span>
                     </td>
                     <td class="py-4 px-6 text-sm">${submitterText}</td>
-                    <td class="py-4 px-6 text-sm text-slate-600 leading-relaxed font-medium max-w-xs break-words">${sub.description}</td>
-                    <td class="py-4 px-6 text-sm">${evidenceHtml}</td>
+                    <td class="py-4 px-6 text-sm text-slate-600 leading-relaxed font-medium max-w-xs break-words">
+                        <div>${sub.description}</div>
+                        ${evidenceHtml}
+                    </td>
                     <td class="py-4 px-6 text-sm">${statusBadge}</td>
                     <td class="py-4 px-6 text-sm text-right">${actionHtml}</td>
                 </tr>`;
