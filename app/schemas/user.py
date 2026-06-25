@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
     email: str
-    password: str
+    password: str = Field(..., min_length=8, max_length=72)
     full_name: str
     role: str = "VIEWER"
     employee_id: str | None = None

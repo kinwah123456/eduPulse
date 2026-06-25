@@ -407,6 +407,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (passwordInput.value.length < 8) {
             setFieldError(passwordInput, 'Password must be at least 8 characters long');
             isValid = false;
+        } else if (passwordInput.value.length > 72) {
+            setFieldError(passwordInput, 'Password must not exceed 72 characters');
+            isValid = false;
         }
 
         // Confirm Password Match
