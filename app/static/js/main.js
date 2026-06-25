@@ -1,7 +1,7 @@
 // EduPulse Ops — Main Entry Orchestrator Module
 // Co-ordinates startup auth guard, profile matching, timelines, routing, and global views switching
 
-import { state, authFetch, API_BASE, mockClassrooms, mockTeachers, mockStudents, mockSubjects, mockAssessments } from './api.js';
+import { state, authFetch, API_BASE, decodeJwtPayload, mockClassrooms, mockTeachers, mockStudents, mockSubjects, mockAssessments } from './api.js';
 import { showToast, escapeHtml, formatTodayDate, formatTime12h, getCurrentTime24h, getGreeting } from './ui.js';
 import { loadClassroomsData, populateTeacherDropdown } from './classrooms.js';
 import { loadStudentsData, populateClassDropdowns } from './students.js';
@@ -49,22 +49,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Check JWT expiration (skip for simulated tokens)
     if (!state.isSimulated) {
-        // Decode JWT payload inline
-        try {
-            const parts = token.split('.');
-            if (parts.length === 3) {
-                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-                if (payload.exp && (payload.exp * 1000) < (Date.now() - 60000)) {
-                    console.warn('JWT token has expired. Redirecting to login.');
-                    localStorage.removeItem('token');
-                    window.location.href = '/';
-                    return;
-                }
-            } else {
-                window.location.href = '/';
-                return;
-            }
-        } catch {
+        const payload = decodeJwtPayload(token);
+        if (!payload) {
+            window.location.href = '/';
+            return;
+        }
+        if (payload.exp && (payload.exp * 1000) < (Date.now() - 60000)) {
+            console.warn('JWT token has expired. Redirecting to login.');
+            localStorage.removeItem('token');
             window.location.href = '/';
             return;
         }
