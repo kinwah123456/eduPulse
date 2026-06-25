@@ -563,6 +563,22 @@ def trigger_grade_notifications_background(grade_id: int) -> None:
         db.close()
 
 
+def trigger_feedback_notifications_background(submission_id: int) -> None:
+    """Background task to fetch feedback submission and trigger notifications safely under a new DB session."""
+    from app.core.database import SessionLocal
+    from app.models.merit import MeritSubmission
+    
+    db = SessionLocal()
+    try:
+        submission = db.query(MeritSubmission).filter(MeritSubmission.id == submission_id).first()
+        if submission:
+            trigger_feedback_notifications(db, submission)
+    except Exception as e:
+        print(f"[Background Notifications] Failed to trigger feedback notifications for submission {submission_id}: {e}")
+    finally:
+        db.close()
+
+
 def trigger_feedback_notifications(db: Session, submission) -> None:
     """Check active feedback rules and notify school admin/teachers."""
     active_rules = db.query(NotificationRule).filter(

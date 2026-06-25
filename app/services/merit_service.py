@@ -4,7 +4,7 @@ import os
 import json
 import uuid
 from datetime import datetime, timedelta
-from fastapi import UploadFile
+from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.models.merit import MeritOption, MeritLog, MeritSubmission
 from app.models.student import Student
@@ -100,7 +100,8 @@ def create_feedback_submission(
     identity_card_number: str | None,
     description: str,
     location: str | None,
-    uploaded_files: list[UploadFile] | None = None
+    uploaded_files: list[UploadFile] | None = None,
+    background_tasks: BackgroundTasks | None = None
 ) -> MeritSubmission:
     if not description:
         raise ValidationException("Description is compulsory")
@@ -145,8 +146,12 @@ def create_feedback_submission(
     db.refresh(submission)
 
     try:
-        from app.services.notification_service import trigger_feedback_notifications
-        trigger_feedback_notifications(db, submission)
+        if background_tasks:
+            from app.services.notification_service import trigger_feedback_notifications_background
+            background_tasks.add_task(trigger_feedback_notifications_background, submission.id)
+        else:
+            from app.services.notification_service import trigger_feedback_notifications
+            trigger_feedback_notifications(db, submission)
     except Exception as e:
         print(f"Failed to trigger feedback notifications: {e}")
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, UploadFile, File, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Form, UploadFile, File, Request, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 import time
 from collections import defaultdict
@@ -115,6 +115,7 @@ def create_feedback_submission(
     location: str | None = Form(None),
     images: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
     _rate_limit: None = Depends(rate_limit_submissions)
 ):
     return merit_service.create_feedback_submission(
@@ -123,7 +124,8 @@ def create_feedback_submission(
         identity_card_number=identity_card_number,
         description=description,
         location=location,
-        uploaded_files=images
+        uploaded_files=images,
+        background_tasks=background_tasks
     )
 
 
