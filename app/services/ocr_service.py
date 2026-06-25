@@ -6,6 +6,9 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+from concurrent.futures import ThreadPoolExecutor
+_sync_executor = ThreadPoolExecutor(max_workers=4)
+
 def run_sync(coro):
     """Helper to run an async coroutine synchronously, handling running event loops."""
     try:
@@ -15,10 +18,8 @@ def run_sync(coro):
         asyncio.set_event_loop(loop)
         
     if loop.is_running():
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(lambda: asyncio.run(coro))
-            return future.result()
+        future = _sync_executor.submit(lambda: asyncio.run(coro))
+        return future.result()
     else:
         return loop.run_until_complete(coro)
 

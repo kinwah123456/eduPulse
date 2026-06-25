@@ -5,23 +5,8 @@ import cv2
 import numpy as np
 
 import asyncio
-from app.services.ocr_service import ocr_manager
+from app.services.ocr_service import ocr_manager, run_sync
 from PIL import Image
-
-def run_sync(coro):
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-    if loop.is_running():
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(lambda: asyncio.run(coro))
-            return future.result()
-    else:
-        return loop.run_until_complete(coro)
 
 def extract_student_from_header(image_path: str, db, class_id: int) -> tuple[int | None, str | None, float, str]:
     """
