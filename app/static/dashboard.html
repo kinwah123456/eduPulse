@@ -106,9 +106,13 @@
                         <i class="fas fa-marker text-lg shrink-0 w-5 text-center"></i>
                         <span class="sidebar-label">Grading</span>
                     </a>
-                    <a href="#merit" data-view="merit" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl mx-2 text-sm font-medium transition-all duration-150 text-slate-400 hover:bg-slate-800/60 hover:text-white">
+                    <a href="#merit" data-view="merit" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl mx-2 text-sm font-medium transition-all duration-150 text-slate-400 hover:bg-slate-800/60 hover:text-white relative">
                         <i class="fas fa-award text-lg shrink-0 w-5 text-center"></i>
                         <span class="sidebar-label">Merit</span>
+                        <!-- Sidebar Merit Badges -->
+                        <span id="sidebar-merit-badge" class="hidden sidebar-label ml-auto px-1.5 py-0.5 text-[9px] font-extrabold bg-rose-500 text-white rounded-full leading-none shadow-sm shadow-rose-500/30">0</span>
+                        <span id="sidebar-merit-dot" class="hidden absolute top-2.5 right-6 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-slate-900 animate-ping"></span>
+                        <span id="sidebar-merit-dot-solid" class="hidden absolute top-2.5 right-6 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-slate-900"></span>
                     </a>
                     <a href="#automation" data-view="automation" class="sidebar-link flex items-center gap-3 px-4 py-3 rounded-xl mx-2 text-sm font-medium transition-all duration-150 text-slate-400 hover:bg-slate-800/60 hover:text-white">
                         <i class="fas fa-wand-magic-sparkles text-lg shrink-0 w-5 text-center"></i>
@@ -1157,9 +1161,10 @@
                             Student Roster
                         </button>
                         <button id="btn-tab-merit-inbox" onclick="switchMeritSubTab('inbox')"
-                            class="border-b-2 border-transparent text-slate-400 hover:text-slate-600 pb-4 px-1 text-sm font-medium tracking-wide flex items-center gap-2 transition-all cursor-pointer">
+                            class="border-b-2 border-transparent text-slate-400 hover:text-slate-600 pb-4 px-1 text-sm font-medium tracking-wide flex items-center gap-2 transition-all cursor-pointer relative">
                             <i class="fas fa-inbox text-base"></i>
                             Feedback Inbox
+                            <span id="inbox-unread-count" class="hidden px-1.5 py-0.5 text-[9px] font-extrabold bg-rose-500 text-white rounded-full leading-none min-w-[15px] h-[15px] flex items-center justify-center absolute -top-1 -right-3.5 shadow-sm shadow-rose-500/30 animate-pulse">0</span>
                         </button>
                         <button id="btn-tab-merit-logs" onclick="switchMeritSubTab('logs')"
                             class="border-b-2 border-transparent text-slate-400 hover:text-slate-600 pb-4 px-1 text-sm font-medium tracking-wide flex items-center gap-2 transition-all cursor-pointer">

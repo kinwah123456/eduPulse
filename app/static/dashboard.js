@@ -397,6 +397,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Prefetch all metadata dependencies concurrently before hiding overlay
                 await prefetchMetadataDependencies();
 
+                // Load feedback submissions to calculate initial unread badge count
+                loadFeedbackSubmissions();
+
                 hideAuthOverlay();
                 // Fetch dynamic data for active view
                 loadActiveViewData();
@@ -583,6 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load demo schedule and alert data
         renderDemoSchedule();
         renderDemoAlerts();
+        // Load feedback submissions to calculate initial unread badge count
+        loadFeedbackSubmissions();
         // Fetch dynamic data for active view
         loadActiveViewData();
     }
@@ -645,6 +650,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function setSidebarCollapsedState(collapse) {
+            const meritBadge = document.getElementById('sidebar-merit-badge');
+            const hasUnread = meritBadge && !meritBadge.classList.contains('hidden');
+            
             if (collapse) {
                 sidebar.classList.remove('w-64');
                 sidebar.classList.add('w-20');
@@ -652,6 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (collapseIcon) {
                     collapseIcon.classList.remove('fa-chevron-left');
                     collapseIcon.classList.add('fa-chevron-right');
+                }
+                if (hasUnread) {
+                    const dot = document.getElementById('sidebar-merit-dot');
+                    const dotSolid = document.getElementById('sidebar-merit-dot-solid');
+                    if (dot) dot.classList.remove('hidden');
+                    if (dotSolid) dotSolid.classList.remove('hidden');
                 }
             } else {
                 sidebar.classList.remove('w-20');
@@ -661,6 +675,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     collapseIcon.classList.remove('fa-chevron-right');
                     collapseIcon.classList.add('fa-chevron-left');
                 }
+                const dot = document.getElementById('sidebar-merit-dot');
+                const dotSolid = document.getElementById('sidebar-merit-dot-solid');
+                if (dot) dot.classList.add('hidden');
+                if (dotSolid) dotSolid.classList.add('hidden');
             }
         }
 
@@ -6544,6 +6562,41 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="py-4 px-6 text-sm text-right">${actionHtml}</td>
                 </tr>`;
         });
+
+        const unreadCount = feedbackSubmissionsList.filter(sub => sub.status === 'unread').length;
+        updateUnreadFeedbackBadge(unreadCount);
+    }
+
+    function updateUnreadFeedbackBadge(unreadCount) {
+        const badge = document.getElementById('sidebar-merit-badge');
+        const dot = document.getElementById('sidebar-merit-dot');
+        const dotSolid = document.getElementById('sidebar-merit-dot-solid');
+        const tabBadge = document.getElementById('inbox-unread-count');
+        
+        if (!badge || !dot || !dotSolid || !tabBadge) return;
+        
+        if (unreadCount > 0) {
+            tabBadge.textContent = unreadCount;
+            tabBadge.classList.remove('hidden');
+            
+            badge.textContent = unreadCount;
+            badge.classList.remove('hidden');
+            
+            const sidebarEl = document.getElementById('sidebar');
+            const isCollapsed = sidebarEl && sidebarEl.classList.contains('w-20');
+            if (isCollapsed) {
+                dot.classList.remove('hidden');
+                dotSolid.classList.remove('hidden');
+            } else {
+                dot.classList.add('hidden');
+                dotSolid.classList.add('hidden');
+            }
+        } else {
+            tabBadge.classList.add('hidden');
+            badge.classList.add('hidden');
+            dot.classList.add('hidden');
+            dotSolid.classList.add('hidden');
+        }
     }
 
     async function acknowledgeSubmission(subId) {
