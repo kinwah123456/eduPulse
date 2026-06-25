@@ -1,7 +1,28 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, UploadFile, File
+from fastapi import APIRouter, Depends, Form, UploadFile, File, Request, HTTPException, status
 from sqlalchemy.orm import Session
+import time
+from collections import defaultdict
+
+# Rate limiting settings: 5 submissions per 60 seconds per IP
+SUBMISSION_LIMIT = 5
+WINDOW_SECONDS = 60
+IP_REQUESTS = defaultdict(list)
+
+
+def rate_limit_submissions(request: Request) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    # Filter older timestamps
+    IP_REQUESTS[client_ip] = [t for t in IP_REQUESTS[client_ip] if now - t < WINDOW_SECONDS]
+    if len(IP_REQUESTS[client_ip]) >= SUBMISSION_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many feedback submissions. Please try again later."
+        )
+    IP_REQUESTS[client_ip].append(now)
+
 
 from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin, require_teacher_or_admin
@@ -93,7 +114,8 @@ def create_feedback_submission(
     description: str = Form(...),
     location: str | None = Form(None),
     images: list[UploadFile] | None = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _rate_limit: None = Depends(rate_limit_submissions)
 ):
     return merit_service.create_feedback_submission(
         db,

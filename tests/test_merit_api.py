@@ -413,3 +413,27 @@ def test_delete_feedback_submission_permissions(client: TestClient, db_session: 
     assert not os.path.exists(dummy_img_path)
 
 
+def test_feedback_submission_rate_limiting(client: TestClient, db_session: Session):
+    from app.api.v1.merit import IP_REQUESTS
+    IP_REQUESTS.clear()
+
+    # Submit 5 times (allowed)
+    for i in range(5):
+        resp = client.post("/api/v1/merit/submissions", data={
+            "is_anonymous": "true",
+            "description": f"Test rate limit submission {i}"
+        })
+        assert resp.status_code == 200
+
+    # 6th submission should be rate limited (429)
+    resp = client.post("/api/v1/merit/submissions", data={
+        "is_anonymous": "true",
+        "description": "Test rate limit 6th submission"
+    })
+    assert resp.status_code == 429
+    assert "Too many feedback submissions" in resp.json()["detail"]
+
+    IP_REQUESTS.clear()
+
+
+
