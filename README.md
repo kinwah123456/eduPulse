@@ -46,7 +46,7 @@ Digital daily homeroom roll calls and period-based attendance schedules.
 Automated assessment processing with advanced review tools:
 * **OMR Scanning** — Batch upload and grade student response sheets in the SPM-style Malaysian layout.
 * **Batch History** — Dedicated tab with CSV re-export (`[Classroom]-[Subject]-[Datetime].csv`), per-question histograms, student response inspection, and in-place answer corrections that re-grade and sync live scores.
-* **Math Engine** — Automated grading for mathematical expression assessments.
+* **Math Engine (WIP)** — Automated grading for mathematical expression assessments. *(Note: Currently undergoing development/sandbox testing).*
 * **Auto-Cleanup** — Assessments idle >1 year and historical records >1 year are pruned on startup. Temp images are deleted immediately after batch confirmation.
 
 ### 5. Notification Hub
@@ -64,6 +64,11 @@ Each channel has its own connector card under **Dashboard → Notifications → 
 A one-click **"Enter as Judge"** button on the login page provides instant admin access for evaluators — no credentials required.
 * Calls `/api/v1/auth/judge-login` → retrieves (or auto-creates) the first admin user → returns a JWT → redirects to the dashboard.
 * Falls back to offline simulation mode if the backend is unreachable.
+
+### 7. Operations Automation (Pending Manual Verification)
+Batch import and update school resources, students, schedules, attendance, and merit points using CSV files or document images.
+* **Batch Imports** — CSV uploads for teachers, students, parent relationships, schedules, and merit records.
+* **Manual Verification Required** — Applied updates are flagged for administrative approval. Administrators must manually cross-reference records in the corresponding tabs before locking the changes.
 
 ---
 
