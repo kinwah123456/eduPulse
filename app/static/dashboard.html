@@ -786,11 +786,22 @@
                                 </div>
 
                                 <!-- Configuration Panel for MATH (Text Input) -->
-                                <div id="panel-math-config" class="hidden">
-                                    <label for="assessment-math-answer" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Expected Answer Expression</label>
-                                    <input type="text" id="assessment-math-answer" placeholder="e.g. x = 5"
-                                        class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-medium text-slate-800 outline-none transition-all">
-                                    <p class="text-[10px] text-slate-400 mt-1">Provide the exact string pattern to match against student answers.</p>
+                                <div id="panel-math-config" class="hidden space-y-4">
+                                    <div class="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/60 rounded-xl p-4 flex items-start gap-3">
+                                        <div class="p-2 bg-amber-500/10 text-amber-600 rounded-lg shrink-0">
+                                            <i class="fas fa-person-digging text-base animate-pulse"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="text-xs font-bold text-amber-800 uppercase tracking-wider">Work In Progress</h4>
+                                            <p class="text-xs text-amber-600 mt-0.5 leading-relaxed">The Math Grading Engine is currently undergoing development. Features like symbolic expression matching and LaTeX parsing are in sandbox testing.</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label for="assessment-math-answer" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Expected Answer Expression</label>
+                                        <input type="text" id="assessment-math-answer" placeholder="e.g. x = 5"
+                                            class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-medium text-slate-800 outline-none transition-all">
+                                        <p class="text-[10px] text-slate-400 mt-1">Provide the exact string pattern to match against student answers.</p>
+                                    </div>
                                 </div>
 
                                 <button type="submit" id="create-assessment-submit-btn"
@@ -1582,6 +1593,17 @@
                             Operations <span class="text-brand-teal">Automation</span>
                         </h1>
                         <p class="text-slate-500 text-sm mt-1">Batch import and update school resources, students, schedules, attendance, and merit points using CSV files or document images.</p>
+                    </div>
+                </div>
+
+                <!-- Pending Manual Verification Banner -->
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 rounded-2xl p-4 flex items-start gap-4 shadow-sm">
+                    <div class="p-2.5 bg-blue-500/10 text-blue-600 rounded-xl shrink-0">
+                        <i class="fas fa-user-shield text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-blue-900">Pending Manual Verification</h3>
+                        <p class="text-xs text-blue-600 mt-0.5 leading-relaxed">System updates applied via automation are flagged for administrative approval. Please manually cross-reference records in the corresponding tabs before locking the changes.</p>
                     </div>
                 </div>
 
