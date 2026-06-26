@@ -64,16 +64,18 @@ function generateOMRGrid(containerId, count, rangeType, targetObject) {
 export function initGrading() {
     const btnTabAssessments = document.getElementById('btn-tab-assessments');
     const btnTabBatchOMR = document.getElementById('btn-tab-batch-omr');
+    const btnTabBatchOMRRecords = document.getElementById('btn-tab-batch-omr-records');
     const btnTabSubjects = document.getElementById('btn-tab-subjects');
     const subViewAssessments = document.getElementById('sub-view-assessments');
     const subViewBatchOMR = document.getElementById('sub-view-batch-omr');
+    const subViewBatchOMRRecords = document.getElementById('sub-view-batch-omr-records');
     const subViewSubjects = document.getElementById('sub-view-subjects');
     
     function deactivateAllTabs() {
-        [btnTabAssessments, btnTabBatchOMR, btnTabSubjects].forEach(btn => {
+        [btnTabAssessments, btnTabBatchOMR, btnTabBatchOMRRecords, btnTabSubjects].forEach(btn => {
             if (btn) btn.className = 'border-b-2 border-transparent text-slate-400 hover:text-slate-600 pb-4 px-1 text-sm font-medium tracking-wide flex items-center gap-2 transition-all cursor-pointer';
         });
-        [subViewAssessments, subViewBatchOMR, subViewSubjects].forEach(view => {
+        [subViewAssessments, subViewBatchOMR, subViewBatchOMRRecords, subViewSubjects].forEach(view => {
             if (view) view.classList.add('hidden');
         });
     }
@@ -95,6 +97,15 @@ export function initGrading() {
         });
     }
 
+    if (btnTabBatchOMRRecords) {
+        btnTabBatchOMRRecords.addEventListener('click', () => {
+            deactivateAllTabs();
+            btnTabBatchOMRRecords.className = 'border-b-2 border-brand-teal text-brand-teal pb-4 px-1 text-sm font-semibold tracking-wide flex items-center gap-2 transition-all cursor-pointer';
+            subViewBatchOMRRecords.classList.remove('hidden');
+            loadBatchRecords();
+        });
+    }
+
     if (btnTabSubjects) {
         btnTabSubjects.addEventListener('click', () => {
             deactivateAllTabs();
@@ -112,6 +123,8 @@ export function initGrading() {
     let batchSelectedAssessmentId = null;
     let currentZoom = 1.0;
     let currentRotation = 0;
+    let batchSessionId = null;
+    let batchFilename = '';
 
     // Visual feedback for file input selection
     const zipInput = document.getElementById('batch-zip-input');
@@ -119,9 +132,11 @@ export function initGrading() {
     if (zipInput && fileLabel) {
         zipInput.addEventListener('change', () => {
             if (zipInput.files && zipInput.files.length > 0) {
+                batchFilename = zipInput.files[0].name;
                 fileLabel.textContent = `Selected: ${zipInput.files[0].name} (${(zipInput.files[0].size / 1024).toFixed(1)} KB)`;
                 fileLabel.className = "text-xs font-semibold text-brand-teal";
             } else {
+                batchFilename = '';
                 fileLabel.textContent = "Drag & drop your ZIP file here or click to browse";
                 fileLabel.className = "text-xs font-semibold text-slate-605";
             }
@@ -203,6 +218,7 @@ export function initGrading() {
                 
                 if (response.ok) {
                     const data = await response.json();
+                    batchSessionId = data.session_id;
                     batchSheets = data.sheets.map(s => ({ ...s, approved: false }));
                     showToast(`Successfully processed ZIP file with ${batchSheets.length} sheets`);
                     startReviewWizard();
@@ -558,6 +574,11 @@ export function initGrading() {
     if (exitReviewBtn) {
         exitReviewBtn.addEventListener('click', () => {
             if (confirm("Are you sure you want to exit? Your current verification progress on these sheets will be lost.")) {
+                if (batchSessionId && !state.isSimulated) {
+                    authFetch(`${API_BASE}/grading/batch-temp/${batchSessionId}`, {
+                        method: 'DELETE'
+                    }).catch(err => console.error("Immediate cleanup failed:", err));
+                }
                 const uploadState = document.getElementById('batch-upload-state');
                 const reviewState = document.getElementById('batch-review-state');
                 if (uploadState && reviewState) {
@@ -592,6 +613,8 @@ export function initGrading() {
             
             const payload = {
                 assessment_id: batchSelectedAssessmentId,
+                session_id: batchSessionId,
+                filename: batchFilename,
                 grades: batchSheets.map(s => ({
                     student_id: s.student_id,
                     student_response: JSON.stringify(s.answers)
@@ -1160,3 +1183,631 @@ export async function deleteAssessment(id) {
 window.deleteSubject = deleteSubject;
 window.deleteAssessment = deleteAssessment;
 window.loadGradingData = loadGradingData;
+
+export async function loadBatchRecords() {
+    const tbody = document.getElementById('batch-records-table-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="5" class="py-8 text-center text-slate-400 text-sm">
+                <i class="fas fa-circle-notch fa-spin mr-2"></i> Loading batch records...
+            </td>
+        </tr>
+    `;
+
+    if (state.isSimulated) {
+        tbody.innerHTML = `
+            <tr class="hover:bg-slate-50/50 transition-colors">
+                <td class="py-3.5 px-4 font-medium text-slate-900">${new Date().toLocaleString()}</td>
+                <td class="py-3.5 px-4 font-semibold text-brand-teal">Midterm Quiz (Physics)</td>
+                <td class="py-3.5 px-4 text-slate-500 font-medium">physics_quiz_batch.zip</td>
+                <td class="py-3.5 px-4 text-center font-semibold text-slate-700">3</td>
+                <td class="py-3.5 px-4 text-center">
+                    <div class="flex items-center justify-center gap-2">
+                        <button onclick="downloadBatchCSV(1)" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer" title="Download CSV">
+                            <i class="fas fa-file-csv"></i>
+                        </button>
+                        <button onclick="openBatchInsight(1)" class="p-2 bg-brand-teal/10 hover:bg-brand-teal/20 text-brand-teal rounded-xl transition-all cursor-pointer" title="Insight (Histogram)">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                        <button onclick="openBatchSubmissions(1)" class="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 rounded-xl transition-all cursor-pointer" title="Inspect Submissions">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="openBatchEdit(1)" class="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-xl transition-all cursor-pointer" title="Edit Record">
+                            <i class="fas fa-pencil"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    try {
+        const response = await authFetch(`${API_BASE}/grading/batch-records`);
+        if (response.ok) {
+            const records = await response.json();
+            if (records.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-8 text-center text-slate-400 text-sm">
+                            No batch OMR records found.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = records.map(r => `
+                <tr class="hover:bg-slate-50/50 transition-colors">
+                    <td class="py-3.5 px-4 font-medium text-slate-900">${new Date(r.created_at).toLocaleString()}</td>
+                    <td class="py-3.5 px-4">
+                        <div class="font-semibold text-slate-900">${r.assessment_title}</div>
+                        <div class="text-xs text-slate-400 font-medium">${r.subject_name}</div>
+                    </td>
+                    <td class="py-3.5 px-4 text-slate-500 font-medium">${r.filename || 'Batch OMR Results'}</td>
+                    <td class="py-3.5 px-4 text-center font-semibold text-slate-700">${r.sheets_count}</td>
+                    <td class="py-3.5 px-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="downloadBatchCSV(${r.id})" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer" title="Download CSV">
+                                <i class="fas fa-file-csv"></i>
+                            </button>
+                            <button onclick="openBatchInsight(${r.id})" class="p-2 bg-brand-teal/10 hover:bg-brand-teal/20 text-brand-teal rounded-xl transition-all cursor-pointer" title="Insight (Histogram)">
+                                <i class="fas fa-chart-bar"></i>
+                            </button>
+                            <button onclick="openBatchSubmissions(${r.id})" class="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 rounded-xl transition-all cursor-pointer" title="Inspect Submissions">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button onclick="openBatchEdit(${r.id})" class="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-xl transition-all cursor-pointer" title="Edit Record">
+                                <i class="fas fa-pencil"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-red-500 text-sm">
+                        Failed to load batch records.
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (error) {
+        console.error("Error loading batch records:", error);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="py-8 text-center text-red-500 text-sm">
+                    Network error. Failed to load batch records.
+                </td>
+            </tr>
+        `;
+    }
+}
+
+export async function downloadBatchCSV(recordId) {
+    if (state.isSimulated) {
+        showToast("CSV Download (Simulated Mode)");
+        let csvRows = [
+            ["Student Name", "Score (%)", "Correct Answers", "Total Questions"],
+            ["Ravi Kumar", 90.0, 9, 10],
+            ["Nurul Izzah", 80.0, 8, 10],
+            ["Ahmad Danial", 70.0, 7, 10]
+        ];
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+            + csvRows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `grades_report_batch_${recordId}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+    }
+
+    try {
+        const response = await authFetch(`${API_BASE}/grading/batch-records/${recordId}/download-csv`);
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", `grades_report_batch_${recordId}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            showToast("CSV report downloaded successfully");
+        } else {
+            showToast("Failed to download CSV", "error");
+        }
+    } catch (error) {
+        console.error("Error downloading CSV:", error);
+        showToast("Network error. Failed to download CSV.", "error");
+    }
+}
+
+export async function openBatchInsight(recordId) {
+    const modal = document.getElementById('batch-insight-modal');
+    const titleEl = document.getElementById('batch-insight-title');
+    const metaEl = document.getElementById('batch-insight-meta');
+    const histContainer = document.getElementById('batch-insight-histogram');
+
+    if (!modal || !titleEl || !metaEl || !histContainer) return;
+
+    histContainer.innerHTML = '<div class="text-center py-4 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i> Loading insight details...</div>';
+    modal.classList.remove('hidden');
+
+    let record;
+    if (state.isSimulated) {
+        record = {
+            assessment_title: "Midterm Quiz (Physics)",
+            filename: "physics_quiz_batch.zip",
+            created_at: new Date().toISOString(),
+            answer_key: {"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"C"},
+            sheets: [
+                { student_name: "Ravi Kumar", score: 90.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_name: "Nurul Izzah", score: 80.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_name: "Ahmad Danial", score: 70.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"B","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) }
+            ]
+        };
+    } else {
+        try {
+            const response = await authFetch(`${API_BASE}/grading/batch-records/${recordId}`);
+            if (response.ok) {
+                record = await response.json();
+            } else {
+                showToast("Failed to fetch batch insight details", "error");
+                modal.classList.add('hidden');
+                return;
+            }
+        } catch (error) {
+            console.error("Error loading insight:", error);
+            showToast("Network error. Failed to load insights.", "error");
+            modal.classList.add('hidden');
+            return;
+        }
+    }
+
+    titleEl.textContent = record.assessment_title;
+    metaEl.textContent = `Batch File: ${record.filename} | Date: ${new Date(record.created_at).toLocaleString()}`;
+
+    const answerKey = record.answer_key;
+    const sheets = record.sheets;
+    const totalStudents = sheets.length;
+
+    let histHtml = '';
+    if (Object.keys(answerKey).length === 0 || totalStudents === 0) {
+        histHtml = '<div class="text-center py-4 text-slate-400">No questions or sheets to display insights for.</div>';
+    } else {
+        const questionNumbers = Object.keys(answerKey).sort((a, b) => parseInt(a) - parseInt(b));
+        
+        questionNumbers.forEach(q => {
+            const expected = answerKey[q];
+            let correctCount = 0;
+            sheets.forEach(sheet => {
+                try {
+                    const resp = typeof sheet.student_response === 'string' ? JSON.parse(sheet.student_response) : sheet.student_response;
+                    if (resp && resp[q] === expected) {
+                        correctCount++;
+                    }
+                } catch (e) {
+                    console.error("Error parsing response:", e);
+                }
+            });
+
+            const percent = totalStudents > 0 ? (correctCount / totalStudents) * 100 : 0;
+
+            histHtml += `
+                <div class="flex items-center gap-4">
+                    <span class="w-8 text-xs font-bold text-slate-650">Q${q}</span>
+                    <div class="flex-1 bg-slate-200 h-4 rounded-full overflow-hidden relative">
+                        <div class="bg-brand-teal h-full rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+                    </div>
+                    <span class="w-28 text-right text-xs font-semibold text-slate-700">${correctCount} / ${totalStudents} (${percent.toFixed(0)}%)</span>
+                </div>
+            `;
+        });
+    }
+
+    histContainer.innerHTML = histHtml;
+}
+
+export function closeBatchInsightModal() {
+    const modal = document.getElementById('batch-insight-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function openBatchSubmissions(recordId) {
+    const modal = document.getElementById('batch-submissions-modal');
+    const titleEl = document.getElementById('batch-submissions-title');
+    const metaEl = document.getElementById('batch-submissions-meta');
+    const listContainer = document.getElementById('batch-submissions-list');
+
+    if (!modal || !titleEl || !metaEl || !listContainer) return;
+
+    listContainer.innerHTML = '<div class="text-center py-4 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i> Loading submissions...</div>';
+    modal.classList.remove('hidden');
+
+    let record;
+    if (state.isSimulated) {
+        record = {
+            assessment_title: "Midterm Quiz (Physics)",
+            filename: "physics_quiz_batch.zip",
+            created_at: new Date().toISOString(),
+            answer_key: {"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"C"},
+            sheets: [
+                { student_name: "Ravi Kumar", score: 90.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_name: "Nurul Izzah", score: 80.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_name: "Ahmad Danial", score: 70.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"B","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) }
+            ]
+        };
+    } else {
+        try {
+            const response = await authFetch(`${API_BASE}/grading/batch-records/${recordId}`);
+            if (response.ok) {
+                record = await response.json();
+            } else {
+                showToast("Failed to fetch batch details", "error");
+                modal.classList.add('hidden');
+                return;
+            }
+        } catch (error) {
+            console.error("Error loading submissions:", error);
+            showToast("Network error. Failed to load submissions.", "error");
+            modal.classList.add('hidden');
+            return;
+        }
+    }
+
+    titleEl.textContent = record.assessment_title;
+    metaEl.textContent = `Batch File: ${record.filename} | Date: ${new Date(record.created_at).toLocaleString()}`;
+
+    const answerKey = record.answer_key;
+    const sheets = record.sheets;
+
+    if (sheets.length === 0) {
+        listContainer.innerHTML = '<div class="text-center py-4 text-slate-400">No submissions found in this batch.</div>';
+        return;
+    }
+
+    let listHtml = '';
+    sheets.forEach((sheet, index) => {
+        let resp = {};
+        try {
+            resp = typeof sheet.student_response === 'string' ? JSON.parse(sheet.student_response) : sheet.student_response;
+        } catch (e) {
+            console.error("Error parsing response:", e);
+        }
+
+        const qKeys = Object.keys(answerKey).sort((a, b) => parseInt(a) - parseInt(b));
+        
+        let answersPillsHtml = '';
+        qKeys.forEach(q => {
+            const expected = answerKey[q];
+            const studentAns = resp[q] || '';
+            
+            if (studentAns === '') {
+                answersPillsHtml += `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-bold border border-slate-200">
+                        Q${q}: -
+                    </span>
+                `;
+            } else if (studentAns === expected) {
+                answersPillsHtml += `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                        Q${q}: ${studentAns} <i class="fas fa-check"></i>
+                      </span>
+                  `;
+            } else {
+                answersPillsHtml += `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold border border-rose-100" title="Expected: ${expected}">
+                        Q${q}: ${studentAns} <span class="text-[9px] font-normal">(Exp: ${expected})</span> <i class="fas fa-xmark"></i>
+                    </span>
+                `;
+            }
+        });
+
+        listHtml += `
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h5 class="font-bold text-slate-900 text-sm sm:text-base">${sheet.student_name}</h5>
+                        <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5">Student ID: ${sheet.student_id}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-lg sm:text-xl font-extrabold text-brand-teal">${sheet.score.toFixed(1)}%</span>
+                        <span class="text-[9px] text-slate-400 font-semibold block uppercase">Final Grade Score</span>
+                    </div>
+                </div>
+                <div class="border-t border-slate-200/60 pt-3">
+                    <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Submitted Choices</div>
+                    <div class="flex flex-wrap gap-2">
+                        ${answersPillsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    listContainer.innerHTML = listHtml;
+}
+
+export function closeBatchSubmissionsModal() {
+    const modal = document.getElementById('batch-submissions-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+let currentEditRecordId = null;
+let currentEditRecordData = null;
+
+export async function openBatchEdit(recordId) {
+    currentEditRecordId = recordId;
+    const modal = document.getElementById('batch-edit-modal');
+    const filenameInput = document.getElementById('batch-edit-filename');
+    const listContainer = document.getElementById('batch-edit-students-list');
+
+    if (!modal || !filenameInput || !listContainer) return;
+
+    listContainer.innerHTML = '<div class="text-center py-4 text-slate-450"><i class="fas fa-circle-notch fa-spin mr-2"></i> Loading batch details...</div>';
+    modal.classList.remove('hidden');
+
+    if (state.isSimulated) {
+        currentEditRecordData = {
+            id: recordId,
+            filename: "physics_quiz_batch.zip",
+            answer_key: {"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"C"},
+            sheets: [
+                { student_id: 1, student_name: "Ravi Kumar", score: 90.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"C","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_id: 2, student_name: "Nurul Izzah", score: 80.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"A","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) },
+                { student_id: 3, student_name: "Ahmad Danial", score: 70.0, student_response: JSON.stringify({"1":"B","2":"C","3":"D","4":"B","5":"B","6":"A","7":"D","8":"A","9":"B","10":"A"}) }
+            ]
+        };
+    } else {
+        try {
+            const response = await authFetch(`${API_BASE}/grading/batch-records/${recordId}`);
+            if (response.ok) {
+                currentEditRecordData = await response.json();
+            } else {
+                showToast("Failed to fetch batch record details", "error");
+                modal.classList.add('hidden');
+                return;
+            }
+        } catch (error) {
+            console.error("Error loading batch details:", error);
+            showToast("Network error. Failed to load batch record details.", "error");
+            modal.classList.add('hidden');
+            return;
+        }
+    }
+
+    filenameInput.value = currentEditRecordData.filename || 'Batch OMR Results';
+
+    const sheets = currentEditRecordData.sheets;
+    if (sheets.length === 0) {
+        listContainer.innerHTML = '<div class="text-center py-4 text-slate-400">No submissions found in this batch.</div>';
+        return;
+    }
+
+    let listHtml = '';
+    sheets.forEach((sheet) => {
+        listHtml += `
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h5 class="font-bold text-slate-900 text-sm sm:text-base">${sheet.student_name}</h5>
+                        <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5">Student ID: ${sheet.student_id}</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-right">
+                            <span class="text-base sm:text-lg font-extrabold text-brand-teal">${sheet.score.toFixed(1)}%</span>
+                            <span class="text-[9px] text-slate-400 font-semibold block uppercase">Score</span>
+                        </div>
+                        <button onclick="toggleStudentEditGrid(${sheet.student_id})" class="px-3.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                            Edit Answers
+                        </button>
+                    </div>
+                </div>
+                <!-- Interactive override OMR grid -->
+                <div id="edit-grid-container-${sheet.student_id}" class="hidden border-t border-slate-200 pt-3 space-y-3">
+                    <div id="edit-grid-${sheet.student_id}" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 p-3.5 bg-white border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
+                        <!-- Populated dynamically -->
+                    </div>
+                    <button onclick="saveStudentCorrection(${sheet.student_id})" class="w-full py-2.5 bg-brand-teal hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-brand-teal/15">
+                        <i class="fas fa-floppy-disk"></i> Save Student Correction
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    listContainer.innerHTML = listHtml;
+}
+
+export function closeBatchEditModal() {
+    const modal = document.getElementById('batch-edit-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+let activeStudentEditAnswers = {};
+
+export function toggleStudentEditGrid(studentId) {
+    const gridContainer = document.getElementById(`edit-grid-container-${studentId}`);
+    if (!gridContainer) return;
+
+    if (!gridContainer.classList.contains('hidden')) {
+        gridContainer.classList.add('hidden');
+        return;
+    }
+
+    gridContainer.classList.remove('hidden');
+
+    const sheet = currentEditRecordData.sheets.find(s => s.student_id === studentId);
+    if (!sheet) return;
+
+    let studentAnswers = {};
+    try {
+        studentAnswers = typeof sheet.student_response === 'string' ? JSON.parse(sheet.student_response) : sheet.student_response;
+    } catch (e) {
+        console.error("Error parsing response:", e);
+    }
+
+    activeStudentEditAnswers[studentId] = { ...studentAnswers };
+
+    const grid = document.getElementById(`edit-grid-${studentId}`);
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const answerKey = currentEditRecordData.answer_key;
+    const qKeys = Object.keys(answerKey).sort((a, b) => parseInt(a) - parseInt(b));
+    const rangeOptions = ['A', 'B', 'C', 'D', 'E']; // SPM OMR standard range
+
+    qKeys.forEach(q => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0';
+
+        const label = document.createElement('span');
+        label.className = 'text-xs font-bold text-slate-700 shrink-0 w-8';
+        label.textContent = `Q${q}`;
+        row.appendChild(label);
+
+        const optionsDiv = document.createElement('div');
+        optionsDiv.className = 'flex gap-2';
+
+        rangeOptions.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-6.5 h-6.5 rounded-full border border-slate-200 text-xs font-bold text-slate-500 hover:border-brand-teal hover:text-brand-teal transition-all flex items-center justify-center cursor-pointer';
+            btn.textContent = opt;
+
+            if (activeStudentEditAnswers[studentId][q] === opt) {
+                btn.className = 'w-6.5 h-6.5 rounded-full border border-brand-teal text-xs font-bold bg-brand-teal text-white shadow-sm flex items-center justify-center cursor-pointer';
+            }
+
+            btn.addEventListener('click', () => {
+                if (activeStudentEditAnswers[studentId][q] === opt) {
+                    delete activeStudentEditAnswers[studentId][q];
+                    btn.className = 'w-6.5 h-6.5 rounded-full border border-slate-200 text-xs font-bold text-slate-500 hover:border-brand-teal hover:text-brand-teal transition-all flex items-center justify-center cursor-pointer';
+                } else {
+                    activeStudentEditAnswers[studentId][q] = opt;
+                    Array.from(optionsDiv.children).forEach(sibling => {
+                        if (sibling !== btn) {
+                            sibling.className = 'w-6.5 h-6.5 rounded-full border border-slate-200 text-xs font-bold text-slate-500 hover:border-brand-teal hover:text-brand-teal transition-all flex items-center justify-center cursor-pointer';
+                        }
+                    });
+                    btn.className = 'w-6.5 h-6.5 rounded-full border border-brand-teal text-xs font-bold bg-brand-teal text-white shadow-sm flex items-center justify-center cursor-pointer';
+                }
+            });
+
+            optionsDiv.appendChild(btn);
+        });
+
+        row.appendChild(optionsDiv);
+        grid.appendChild(row);
+    });
+}
+
+export async function saveStudentCorrection(studentId) {
+    const studentAnswers = activeStudentEditAnswers[studentId];
+    if (!studentAnswers) return;
+
+    if (state.isSimulated) {
+        showToast("Student correction successfully saved (Simulated Mode)");
+        // Update mock records
+        const sheet = currentEditRecordData.sheets.find(s => s.student_id === studentId);
+        if (sheet) {
+            sheet.student_response = JSON.stringify(studentAnswers);
+            let correctCount = 0;
+            const answerKey = currentEditRecordData.answer_key;
+            for (let q in answerKey) {
+                if (studentAnswers[q] === answerKey[q]) correctCount++;
+            }
+            sheet.score = (correctCount / Object.keys(answerKey).length) * 100.0;
+        }
+        openBatchEdit(currentEditRecordId);
+        loadBatchRecords();
+        return;
+    }
+
+    try {
+        const payload = {
+            grades: [
+                {
+                    student_id: studentId,
+                    student_response: JSON.stringify(studentAnswers)
+                }
+            ]
+        };
+
+        const response = await authFetch(`${API_BASE}/grading/batch-records/${currentEditRecordId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            showToast("Student correction successfully saved");
+            openBatchEdit(currentEditRecordId);
+            loadBatchRecords();
+            loadGradingData();
+        } else {
+            const err = await response.json();
+            showToast(`Failed to save correction: ${err.detail || 'Server error'}`, 'error');
+        }
+    } catch (error) {
+        console.error("Error saving student correction:", error);
+        showToast("Network error. Failed to save correction.", "error");
+    }
+}
+
+// Bind save filename action
+document.addEventListener('DOMContentLoaded', () => {
+    const updateFilenameBtn = document.getElementById('batch-edit-save-filename-btn');
+    if (updateFilenameBtn) {
+        updateFilenameBtn.addEventListener('click', async () => {
+            const newFilename = document.getElementById('batch-edit-filename').value;
+            if (!newFilename || !newFilename.trim()) {
+                showToast("Please enter a valid filename", "error");
+                return;
+            }
+
+            if (state.isSimulated) {
+                showToast("Batch filename updated successfully (Simulated Mode)");
+                return;
+            }
+
+            try {
+                const response = await authFetch(`${API_BASE}/grading/batch-records/${currentEditRecordId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ filename: newFilename })
+                });
+
+                if (response.ok) {
+                    showToast("Batch filename updated successfully");
+                    loadBatchRecords();
+                } else {
+                    const err = await response.json();
+                    showToast(`Failed to update filename: ${err.detail || 'Server error'}`, 'error');
+                }
+            } catch (error) {
+                console.error("Error updating filename:", error);
+                showToast("Network error. Failed to update filename.", "error");
+            }
+        });
+    }
+});
+
+// Bind new functions to window for HTML compatibility
+window.loadBatchRecords = loadBatchRecords;
+window.downloadBatchCSV = downloadBatchCSV;
+window.openBatchInsight = openBatchInsight;
+window.closeBatchInsightModal = closeBatchInsightModal;
+window.openBatchSubmissions = openBatchSubmissions;
+window.closeBatchSubmissionsModal = closeBatchSubmissionsModal;
+window.openBatchEdit = openBatchEdit;
+window.closeBatchEditModal = closeBatchEditModal;
+window.toggleStudentEditGrid = toggleStudentEditGrid;
+window.saveStudentCorrection = saveStudentCorrection;
+

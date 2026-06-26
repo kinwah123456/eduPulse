@@ -18,7 +18,8 @@ from app.api.v1.router import api_v1_router
 
 async def temp_cleanup_loop():
     """Background task to periodically clean up expired temporary submissions."""
-    from app.services.grading_service import cleanup_expired_temp_submissions
+    from app.services.grading_service import cleanup_expired_temp_submissions, cleanup_expired_batch_omr_records
+    from app.core.database import SessionLocal
     # Wait 60 seconds before first run to let startup finish
     await asyncio.sleep(60)
     while True:
@@ -26,6 +27,18 @@ async def temp_cleanup_loop():
             cleanup_expired_temp_submissions()
         except Exception as e:
             print(f"Error during expired OMR temp cleanup: {e}")
+            
+        try:
+            db = SessionLocal()
+            try:
+                deleted_batch = cleanup_expired_batch_omr_records(db)
+                if deleted_batch > 0:
+                    print(f"Background Cleanup: removed {deleted_batch} expired batch OMR records.")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Error during background batch records cleanup: {e}")
+            
         # Run every hour (3600 seconds)
         await asyncio.sleep(3600)
 
@@ -41,7 +54,7 @@ async def lifespan(app: FastAPI):
     
     # Run automatic cleanup on startup (remove assessments not used/updated in 3 months)
     from app.core.database import SessionLocal
-    from app.services.grading_service import cleanup_inactive_assessments
+    from app.services.grading_service import cleanup_inactive_assessments, cleanup_expired_batch_omr_records
     from app.services.merit_service import cleanup_expired_feedback_submissions
     db = SessionLocal()
     try:
@@ -49,6 +62,8 @@ async def lifespan(app: FastAPI):
         print(f"Cleanup: removed {deleted} inactive assessments.")
         deleted_feedback = cleanup_expired_feedback_submissions(db)
         print(f"Cleanup: removed {deleted_feedback} expired feedback submissions.")
+        deleted_batch = cleanup_expired_batch_omr_records(db)
+        print(f"Cleanup: removed {deleted_batch} expired batch OMR records.")
     except Exception as e:
         print(f"Cleanup failed: {e}")
         

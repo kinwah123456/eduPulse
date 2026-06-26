@@ -27,15 +27,19 @@ def setup_notifications(db_session: Session):
 
 def test_seed_notifications(db_session: Session):
     connectors = db_session.query(NotificationConnector).all()
-    assert len(connectors) == 2
+    assert len(connectors) == 3
     assert any(c.name == "email" for c in connectors)
     assert any(c.name == "whatsapp" for c in connectors)
+    assert any(c.name == "sms" for c in connectors)
 
     rules = db_session.query(NotificationRule).all()
-    assert len(rules) == 6
+    assert len(rules) == 9
     assert any(r.event_type == "student_absent" and r.connector_type == "email" for r in rules)
     assert any(r.event_type == "assignment_failed" and r.connector_type == "whatsapp" for r in rules)
     assert any(r.event_type == "feedback_submitted" and r.connector_type == "email" for r in rules)
+    assert any(r.event_type == "student_absent" and r.connector_type == "sms" for r in rules)
+    assert any(r.event_type == "assignment_failed" and r.connector_type == "sms" for r in rules)
+    assert any(r.event_type == "feedback_submitted" and r.connector_type == "sms" for r in rules)
 
 
 def test_update_connector(db_session: Session):
@@ -320,4 +324,42 @@ def test_trigger_grade_notifications_background(mock_send_email, db_session: Ses
     mock_send_email.assert_called_once()
     args, kwargs = mock_send_email.call_args
     assert args[1] == "jane.parent@test.com"
+
+
+def test_resolve_parent_contact_with_parent_email(db_session: Session):
+    from app.models.school import School
+    school = School(name="Test School", code="TS05")
+    db_session.add(school)
+    db_session.flush()
+
+    # 1. Test prioritizing parent_email when channel is EMAIL
+    student = Student(
+        student_id_number="S99991",
+        full_name="Jane Doe Email Test",
+        school_id=school.id,
+        father_contact="father_phone_only",
+        mother_contact="mother_email@test.com",
+        parent_email="dedicated_parent@test.com"
+    )
+    db_session.add(student)
+    db_session.flush()
+
+    resolved_email = notification_service.resolve_parent_contact(student, "EMAIL")
+    assert resolved_email == "dedicated_parent@test.com"
+
+    # 2. Test fallback to contacts if parent_email is None/empty
+    student_fallback = Student(
+        student_id_number="S99992",
+        full_name="Jane Doe Fallback Test",
+        school_id=school.id,
+        father_contact="father_phone_only",
+        mother_contact="fallback_mother@test.com",
+        parent_email=""
+    )
+    db_session.add(student_fallback)
+    db_session.flush()
+
+    resolved_fallback_email = notification_service.resolve_parent_contact(student_fallback, "EMAIL")
+    assert resolved_fallback_email == "fallback_mother@test.com"
+
 

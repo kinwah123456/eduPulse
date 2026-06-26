@@ -218,8 +218,8 @@ def update_assessment(db: Session, assessment_id: int, data: dict) -> Assessment
 def cleanup_inactive_assessments(db: Session) -> int:
     from datetime import datetime, timedelta
     
-    # 90 days threshold for 3 months
-    threshold = datetime.utcnow() - timedelta(days=90)
+    # 365 days threshold for 1 year
+    threshold = datetime.utcnow() - timedelta(days=365)
     
     assessments = db.query(Assessment).all()
     deleted_count = 0
@@ -249,7 +249,7 @@ def cleanup_inactive_assessments(db: Session) -> int:
     return deleted_count
 
 
-def process_batch_zip(db: Session, zip_bytes: bytes, class_id: int, assessment_id: int) -> list[dict]:
+def process_batch_zip(db: Session, zip_file_like, class_id: int, assessment_id: int) -> list[dict]:
     import os
     import io
     import uuid
@@ -281,7 +281,7 @@ def process_batch_zip(db: Session, zip_bytes: bytes, class_id: int, assessment_i
     
     # Sample mappings removed for dynamic answer detection
     
-    with zipfile.ZipFile(io.BytesIO(zip_bytes), 'r') as zf:
+    with zipfile.ZipFile(zip_file_like, 'r') as zf:
         for name in zf.namelist():
             if name.endswith('/') or "__MACOSX" in name or "Thumbs.db" in name:
                 continue
@@ -295,13 +295,18 @@ def process_batch_zip(db: Session, zip_bytes: bytes, class_id: int, assessment_i
             with open(dest_path, 'wb') as f:
                 f.write(file_data)
                 
-            # Crop top 22% for name display
+            # Crop the LEFT PANEL name box for display in the review wizard.
+            # SPM-style sheets have the handwritten student name in a box at the
+            # top-left of the form (left ~35% width, top ~22% height).
+            # We crop this region specifically so the teacher can read the handwritten
+            # name and confirm via the dropdown.
             crop_filename = f"crop_{base_name}"
             crop_path = os.path.join(temp_dir, crop_filename)
             try:
                 with Image.open(dest_path) as img:
                     w, h = img.size
-                    cropped = img.crop((0, 0, w, int(h * 0.22)))
+                    # Use left panel name box: left 36% width, top 22% height
+                    cropped = img.crop((0, 0, int(w * 0.36), int(h * 0.22)))
                     cropped.save(crop_path, "JPEG")
             except Exception as e:
                 # Fallback: copy original or create dummy if PIL fails
@@ -326,9 +331,7 @@ def process_batch_zip(db: Session, zip_bytes: bytes, class_id: int, assessment_i
             
             # 2. Dynamic OMR bubble answer detection
             answers = detect_answers_from_image(dest_path, num_questions)
-            
 
-                    
             # Fill missing/undetected questions with blank string
             for i in range(1, num_questions + 1):
                 q_key = str(i)
@@ -404,6 +407,25 @@ def cleanup_expired_temp_submissions(max_age_seconds: int = 86400) -> None:
                     print(f"[Storage Cleanup] Cleaned up expired OMR directory: {entry.name}")
                 except Exception as e:
                     print(f"[Storage Cleanup] Failed to delete {entry.path}: {e}")
+
+
+def cleanup_expired_batch_omr_records(db: Session) -> int:
+    """Delete all BatchOMRRecord records older than 1 year (365 days)."""
+    from datetime import datetime, timedelta
+    from app.models.grading import BatchOMRRecord
+    
+    threshold = datetime.utcnow() - timedelta(days=365)
+    expired_records = db.query(BatchOMRRecord).filter(BatchOMRRecord.created_at < threshold).all()
+    deleted_count = len(expired_records)
+    
+    for r in expired_records:
+        db.delete(r)
+        
+    if deleted_count > 0:
+        db.commit()
+        
+    return deleted_count
+
 
 
 

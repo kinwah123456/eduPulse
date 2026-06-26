@@ -105,6 +105,17 @@ export function initAttendance() {
 export async function loadAttendanceViewData() {
     const classSelect = document.getElementById('attendance-class-select');
     const dateInput = document.getElementById('attendance-date-select');
+    const periodSelect = document.getElementById('attendance-period-select');
+
+    // Reset roster to empty state when loading/revisiting the Attendance module
+    const rosterCard = document.getElementById('attendance-roster-card');
+    const emptyState = document.getElementById('attendance-empty-state');
+    const mobileSaveBar = document.getElementById('attendance-mobile-save-bar');
+    if (rosterCard) rosterCard.classList.add('hidden');
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (mobileSaveBar) mobileSaveBar.classList.add('hidden');
+    if (classSelect) classSelect.value = '';
+    if (periodSelect) periodSelect.value = '';
 
     if (dateInput && !dateInput.value) {
         const today = new Date().toISOString().split('T')[0];

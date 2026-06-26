@@ -62,6 +62,7 @@ class NotificationLogResponse(BaseModel):
     status: str
     error_message: str | None = None
     reference_id: int | None = None
+    smtp_message_id: str | None = None
     created_at: datetime
 
     student: StudentNameResponse | None = None

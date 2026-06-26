@@ -50,6 +50,9 @@ def register_user(
             first_school = db.query(School).first()
             school_id = first_school.id if first_school else 1
 
+        # Lock the School row to serialize concurrent teacher registration requests
+        db.query(School).filter(School.id == school_id).with_for_update().first()
+
         if not employee_id:
             max_teacher = db.query(Teacher).order_by(Teacher.id.desc()).first()
             next_num = (max_teacher.id + 1) if max_teacher else 1

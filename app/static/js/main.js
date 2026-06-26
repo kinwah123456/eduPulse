@@ -6,12 +6,13 @@ import { showToast, escapeHtml, formatTodayDate, formatTime12h, getCurrentTime24
 import { loadClassroomsData, populateTeacherDropdown } from './classrooms.js';
 import { loadStudentsData, populateClassDropdowns } from './students.js';
 import { loadTeachersData } from './teachers.js';
-import { loadGradingData, populateGradingDropdowns, loadBatchDropdowns } from './grading.js';
+import { loadGradingData, populateGradingDropdowns, loadBatchDropdowns, initGrading } from './grading.js';
 import { loadSchedulesViewData, populateScheduleTargetDropdown, initSchedules } from './schedules.js';
 import { loadAttendanceViewData, populateAttendanceClassDropdown, initAttendance } from './attendance.js';
-import { loadMeritViewData, loadFeedbackSubmissions, renderMeritLeaderboard, initMerit } from './merit.js';
+import { loadMeritViewData, loadFeedbackSubmissions, renderMeritLeaderboard, initMerit, feedbackSubmissionsList } from './merit.js';
 import { loadNotificationsViewData } from './notifications.js';
 import { initAutomationView } from './automation.js';
+import './editModals.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
@@ -362,19 +363,70 @@ document.addEventListener('DOMContentLoaded', () => {
         state.studentsList = mockStudents;
         state.subjectsList = mockSubjects;
         state.assessmentsList = mockAssessments;
-        state.timeSlotsList = [
-            { id: 1, day_of_week: 0, period_number: 1, start_time: '07:30', end_time: '08:10' },
-            { id: 2, day_of_week: 0, period_number: 2, start_time: '08:10', end_time: '08:50' },
-            { id: 3, day_of_week: 0, period_number: 3, start_time: '08:50', end_time: '09:30' },
-            { id: 4, day_of_week: 0, period_number: 4, start_time: '09:30', end_time: '10:10' },
-            { id: 5, day_of_week: 0, period_number: 5, start_time: '10:30', end_time: '11:10' }
+        state.currentTeacher = mockTeachers[0];
+        state.currentSchoolId = state.currentTeacher.school_id;
+
+        // Generate Time Slots for all weekdays (Mon-Fri, 0-4)
+        const slots = [];
+        let slotId = 1;
+        const times = [
+            { start: '07:30', end: '08:10' },
+            { start: '08:10', end: '08:50' },
+            { start: '08:50', end: '09:30' },
+            { start: '09:30', end: '10:10' },
+            { start: '10:30', end: '11:10' },
+            { start: '11:10', end: '11:50' }
         ];
+        for (let day = 0; day < 5; day++) {
+            times.forEach((t, i) => {
+                slots.push({
+                    id: slotId++,
+                    day_of_week: day,
+                    period_number: i + 1,
+                    start_time: t.start,
+                    end_time: t.end
+                });
+            });
+        }
+        state.timeSlotsList = slots;
+
+        // Seed simulated schedule entries for Noraini (teacher_id: 1)
+        const entries = [];
+        let entryId = 1;
+        for (let day = 0; day < 5; day++) {
+            const daySlots = state.timeSlotsList.filter(s => s.day_of_week === day);
+            entries.push({
+                id: entryId++,
+                timetable_id: 999,
+                class_id: 1, // 3 Cempaka
+                subject_id: 1, // Mathematics
+                teacher_id: 1,
+                time_slot_id: daySlots[1].id
+            });
+            entries.push({
+                id: entryId++,
+                timetable_id: 999,
+                class_id: 2, // 5 Dahlia
+                subject_id: 2, // Science
+                teacher_id: 1,
+                time_slot_id: daySlots[2].id
+            });
+            entries.push({
+                id: entryId++,
+                timetable_id: 999,
+                class_id: 1, // 3 Cempaka
+                subject_id: 1, // Mathematics
+                teacher_id: 1,
+                time_slot_id: daySlots[4].id
+            });
+        }
+        state.scheduleEntriesList = entries;
+
         state.activeTimetable = { id: 999, name: "Demo Timetable", school_id: 1, term: "Term 1", is_active: true };
         populateDefaultDropdowns();
 
         setTimeout(hideAuthOverlay, 400);
-        renderDemoSchedule();
-        renderDemoAlerts();
+        renderStudentAlerts();
         loadFeedbackSubmissions();
         loadActiveViewData();
     }
@@ -555,55 +607,171 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function calculateAttendanceRate(students) {
+        const total = students.length;
+        const active = students.filter(s => s.is_active).length;
+        return total > 0 ? Math.min(99.5, 85 + (active / total) * 15).toFixed(1) : '---';
+    }
+
     async function fetchDashboardData() {
         const today = new Date();
         const dayOfWeek = today.getDay();
         const dbDayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 
+        // Fetch/refresh feedback submissions to keep the KPI card updated
+        loadFeedbackSubmissions();
+
+        if (state.isSimulated) {
+            // Simulated Mode logic
+            let entries = state.scheduleEntriesList;
+            if (state.currentTeacher) {
+                entries = entries.filter(e => e.teacher_id === state.currentTeacher.id);
+            }
+            const todaySlots = entries.map(entry => {
+                const slot = state.timeSlotsList.find(s => s.id === entry.time_slot_id);
+                const classroom = state.classroomsList.find(c => c.id === entry.class_id);
+                const subject = state.subjectsList.find(s => s.id === entry.subject_id);
+                return {
+                    period: slot ? slot.period_number : 0,
+                    className: classroom ? classroom.name : 'Unknown Class',
+                    subject: subject ? subject.name : 'Unknown Subject',
+                    start: slot ? slot.start_time : '--:--',
+                    end: slot ? slot.end_time : '--:--',
+                    day_of_week: slot ? slot.day_of_week : -1
+                };
+            })
+            .filter(slot => slot.day_of_week === dbDayOfWeek)
+            .sort((a, b) => a.period - b.period);
+
+            if (todaySlots.length > 0) {
+                renderScheduleTimeline(todaySlots);
+                updateKpiPeriods(todaySlots);
+            } else {
+                renderEmptySchedule();
+            }
+
+            const attendanceRate = calculateAttendanceRate(state.studentsList.length ? state.studentsList : mockStudents);
+            if (kpiAttendance) kpiAttendance.textContent = `${attendanceRate}%`;
+
+            renderMeritLeaderboard(state.studentsList.length ? state.studentsList : mockStudents);
+            renderStudentAlerts();
+            return;
+        }
+
         try {
-            const [slotsRes, studentsRes, schoolsRes] = await Promise.allSettled([
-                authFetch(`${API_BASE}/schedules/time-slots?school_id=${state.currentSchoolId}`),
+            // First, make sure state.timeSlotsList is populated (in case prefetch failed or didn't run yet)
+            if (state.timeSlotsList.length === 0) {
+                const slotsRes = await authFetch(`${API_BASE}/schedules/time-slots?school_id=${state.currentSchoolId}`);
+                if (slotsRes.ok) {
+                    const slotsData = await slotsRes.json();
+                    state.timeSlotsList = slotsData.items || [];
+                }
+            }
+
+            // Fetch classroom and subject details if empty
+            if (state.classroomsList.length === 0) {
+                const classesRes = await authFetch(`${API_BASE}/classes/?school_id=${state.currentSchoolId}`);
+                if (classesRes.ok) {
+                    const data = await classesRes.json();
+                    state.classroomsList = data.items || [];
+                }
+            }
+            if (state.subjectsList.length === 0) {
+                const subjectsRes = await authFetch(`${API_BASE}/grading/subjects?limit=500`);
+                if (subjectsRes.ok) {
+                    const data = await subjectsRes.json();
+                    state.subjectsList = data.items || [];
+                }
+            }
+
+            // Load active timetable if not set
+            if (!state.activeTimetable) {
+                const timetablesRes = await authFetch(`${API_BASE}/schedules/timetables?school_id=${state.currentSchoolId}`);
+                if (timetablesRes.ok) {
+                    const timetables = (await timetablesRes.json()).items || [];
+                    state.activeTimetable = timetables.find(t => t.is_active) || timetables[0] || null;
+                }
+            }
+
+            let entries = [];
+            if (state.activeTimetable) {
+                let url = `${API_BASE}/schedules/timetables/${state.activeTimetable.id}/entries`;
+                if (state.currentTeacher) {
+                    url += `?teacher_id=${state.currentTeacher.id}`;
+                }
+                const entriesRes = await authFetch(url);
+                if (entriesRes.ok) {
+                    const data = await entriesRes.json();
+                    entries = data.items || [];
+                }
+            }
+
+            // Map entries to the timeline card slots
+            const todaySlots = entries.map(entry => {
+                const slot = state.timeSlotsList.find(s => s.id === entry.time_slot_id);
+                const classroom = state.classroomsList.find(c => c.id === entry.class_id);
+                const subject = state.subjectsList.find(s => s.id === entry.subject_id);
+                return {
+                    period: slot ? slot.period_number : 0,
+                    className: classroom ? classroom.name : 'Unknown Class',
+                    subject: subject ? subject.name : 'Unknown Subject',
+                    start: slot ? slot.start_time : '--:--',
+                    end: slot ? slot.end_time : '--:--',
+                    day_of_week: slot ? slot.day_of_week : -1
+                };
+            })
+            .filter(slot => slot.day_of_week === dbDayOfWeek)
+            .sort((a, b) => a.period - b.period);
+
+            if (todaySlots.length > 0) {
+                renderScheduleTimeline(todaySlots);
+                updateKpiPeriods(todaySlots);
+            } else {
+                renderEmptySchedule();
+            }
+
+            const [studentsRes, schoolsRes] = await Promise.allSettled([
                 authFetch(`${API_BASE}/students/?skip=0&limit=200`),
                 authFetch(`${API_BASE}/schools/`)
             ]);
 
-            if (slotsRes.status === 'fulfilled' && slotsRes.value.ok) {
-                const slotsData = await slotsRes.value.json();
-                const todaySlots = (slotsData.items || [])
-                    .filter(slot => slot.day_of_week === dbDayOfWeek)
-                    .sort((a, b) => a.period_number - b.period_number);
-
-                if (todaySlots.length > 0) {
-                    renderScheduleTimeline(todaySlots);
-                    updateKpiPeriods(todaySlots);
-                } else {
-                    renderEmptySchedule();
-                }
-            } else {
-                renderDemoSchedule();
-            }
-
             if (studentsRes.status === 'fulfilled' && studentsRes.value.ok) {
                 const studentData = await studentsRes.value.json();
-                const totalStudents = studentData.total || 0;
-                const activeStudents = (studentData.items || []).filter(s => s.is_active).length;
-                const attendanceRate = totalStudents > 0
-                    ? Math.min(99.5, 85 + (activeStudents / totalStudents) * 15).toFixed(1)
-                    : '---';
+                state.studentsList = studentData.items || [];
+                
+                // Fetch actual attendance rate from API, fallback to mock formula
+                let attendanceRate = '---';
+                try {
+                    const rateRes = await authFetch(`${API_BASE}/attendance/rate?school_id=${state.currentSchoolId}`);
+                    if (rateRes.ok) {
+                        const rateData = await rateRes.json();
+                        attendanceRate = rateData.rate.toFixed(1);
+                    } else {
+                        attendanceRate = calculateAttendanceRate(state.studentsList);
+                    }
+                } catch (err) {
+                    attendanceRate = calculateAttendanceRate(state.studentsList);
+                }
                 if (kpiAttendance) kpiAttendance.textContent = `${attendanceRate}%`;
                 
-                renderMeritLeaderboard(studentData.items || []);
+                renderMeritLeaderboard(state.studentsList);
             } else {
-                renderMeritLeaderboard(mockStudents);
+                const attendanceRate = calculateAttendanceRate(state.studentsList.length ? state.studentsList : mockStudents);
+                if (kpiAttendance) kpiAttendance.textContent = `${attendanceRate}%`;
+                renderMeritLeaderboard(state.studentsList.length ? state.studentsList : mockStudents);
             }
 
-            renderDemoAlerts();
+            renderStudentAlerts();
 
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
-            renderDemoSchedule();
-            renderDemoAlerts();
-            renderMeritLeaderboard(mockStudents);
+            renderEmptySchedule();
+            
+            const attendanceRate = calculateAttendanceRate(state.studentsList.length ? state.studentsList : mockStudents);
+            if (kpiAttendance) kpiAttendance.textContent = `${attendanceRate}%`;
+            
+            renderStudentAlerts();
+            renderMeritLeaderboard(state.studentsList.length ? state.studentsList : mockStudents);
         }
     }
 
@@ -611,25 +779,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!scheduleContainer) return;
         const currentTime = getCurrentTime24h();
 
+        // Calculate active and next slot indices
+        const activeIndex = slots.findIndex(s => currentTime >= s.start && currentTime < s.end);
+        let nextIndex = -1;
+        if (activeIndex === -1) {
+            nextIndex = slots.findIndex(s => currentTime < s.start);
+        } else {
+            if (activeIndex + 1 < slots.length) {
+                nextIndex = activeIndex + 1;
+            }
+        }
+
         let html = '';
         slots.forEach((slot, index) => {
-            const isActive = currentTime >= slot.start_time && currentTime < slot.end_time;
-            const isPast = currentTime >= slot.end_time;
-            const isNext = !isPast && !isActive && index === slots.findIndex(s => getCurrentTime24h() < s.start_time);
+            const isActive = index === activeIndex;
+            const isNext = index === nextIndex;
+            const isPast = index < activeIndex || (activeIndex === -1 && (nextIndex === -1 || index < nextIndex));
 
-            const nodeColor = isActive ? 'bg-brand-teal ring-4 ring-brand-teal/10' : isPast ? 'bg-slate-300' : 'bg-slate-300';
-            const cardBg = isActive
-                ? 'bg-brand-accent/40 border-brand-teal/20'
-                : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/50 transition-colors duration-150';
-
-            const periodLabel = isActive
-                ? `Period ${slot.period_number} &bull; Active Now`
-                : isNext
-                    ? `Period ${slot.period_number} &bull; Up Next`
-                    : isPast
-                        ? `Period ${slot.period_number} &bull; Completed`
-                        : `Period ${slot.period_number}`;
-
+            const nodeColor = isActive ? 'bg-brand-teal ring-4 ring-brand-teal/10' : isNext ? 'bg-slate-700 ring-4 ring-slate-700/10' : 'bg-slate-350';
+            const cardBg = isActive ? 'bg-brand-accent border-brand-teal/20' : isNext ? 'bg-slate-50 border-slate-700/20' : 'bg-slate-50 border-slate-200/60';
+            const labelColor = isActive ? 'text-brand-teal' : 'text-slate-400';
+            const label = isActive ? `Period ${slot.period} &bull; Active Now` : isNext ? `Period ${slot.period} &bull; Up Next` : `Period ${slot.period}`;
             const badge = isActive
                 ? '<span class="px-1.5 py-0.5 bg-brand-teal text-white text-[9px] font-bold rounded">IN PROGRESS</span>'
                 : isNext
@@ -637,9 +807,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     : isPast
                         ? '<span class="px-1.5 py-0.5 bg-slate-300 text-slate-600 text-[9px] font-bold rounded">DONE</span>'
                         : '';
-
-            const labelColor = isActive ? 'text-brand-teal' : 'text-slate-400';
-            const timeColor = isActive ? 'text-slate-800' : 'text-slate-700';
             const opacity = isPast ? 'opacity-60' : '';
 
             html += `
@@ -648,18 +815,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="flex flex-col md:flex-row md:items-center justify-between p-4 ${cardBg} border rounded-2xl gap-3">
                     <div>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-semibold ${labelColor} uppercase tracking-wider">${periodLabel}</span>
+                            <span class="text-xs font-semibold ${labelColor} uppercase tracking-wider">${label}</span>
                             ${badge}
                         </div>
-                        <h4 class="text-lg font-bold text-slate-900 mt-0.5">School Period ${slot.period_number}</h4>
+                        <h4 class="text-lg font-bold text-slate-900 mt-0.5">${slot.className}</h4>
                         <p class="text-xs text-slate-500 mt-0.5">
-                            Time Slot: <span class="font-medium text-slate-700">${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}</span>
-                            &bull; Day: <span class="font-medium text-slate-700">${DAY_NAMES[slot.day_of_week + 1] || 'Today'}</span>
+                            Subject: <span class="font-medium text-slate-700">${slot.subject}</span>
                         </p>
                     </div>
                     <div class="text-left md:text-right shrink-0">
-                        <span class="text-sm font-bold ${timeColor} block">${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}</span>
-                        <span class="text-xs text-slate-400 block mt-0.5">${calculateDuration(slot.start_time, slot.end_time)} mins</span>
+                        <span class="text-sm font-bold text-slate-800 block">${formatTime12h(slot.start)} - ${formatTime12h(slot.end)}</span>
+                        <span class="text-xs text-slate-400 block mt-0.5">${calculateDuration(slot.start, slot.end)} mins</span>
                     </div>
                 </div>
             </div>`;
@@ -679,9 +845,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (kpiPeriods) kpiPeriods.textContent = `${count} Period${count !== 1 ? 's' : ''}`;
 
         const currentTime = getCurrentTime24h();
-        const nextSlot = slots.find(s => currentTime < s.start_time);
+        const nextSlot = slots.find(s => currentTime < s.start);
         if (kpiNextClass && nextSlot) {
-            const [nh, nm] = nextSlot.start_time.split(':').map(Number);
+            const [nh, nm] = nextSlot.start.split(':').map(Number);
             const now = new Date();
             const nextMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), nh, nm).getTime();
             const diffMins = Math.round((nextMs - now.getTime()) / 60000);
@@ -753,16 +919,111 @@ document.addEventListener('DOMContentLoaded', () => {
         if (kpiNextClass) kpiNextClass.textContent = 'Next class in 15 mins';
     }
 
-    function renderDemoAlerts() {
+    async function renderStudentAlerts() {
         if (!alertsContainer) return;
-        const alerts = [
-            { severity: 'critical', name: 'Muhammad Ali Bin Hassan', cls: '3 Cempaka', msg: 'Absent for 3 consecutive days. Attendance dropped to 68% this month.' },
-            { severity: 'warning', name: 'Siti Aminah Binti Yusof', cls: '5 Dahlia', msg: '15% grade drop in Add Mathematics test. Correlates with recent sick leave.' },
-            { severity: 'warning', name: 'Lim Wei Seng', cls: '4 Anggerik', msg: 'Arrived late 4 times in the past 2 weeks. Check-in logs show average 20m delay.' },
-        ];
+
+        const alerts = [];
+
+        // 1. Unread Feedback Submissions (Critical Alerts)
+        (feedbackSubmissionsList || []).forEach(sub => {
+            if (sub.status === 'unread') {
+                let studentName = 'Anonymous Student';
+                let studentClass = 'General';
+                if (!sub.is_anonymous) {
+                    const student = state.studentsList.find(s => s.id === sub.student_id || s.identity_card_number === sub.identity_card_number);
+                    if (student) {
+                        studentName = student.full_name;
+                        const cls = state.classroomsList.find(c => c.id === student.class_id);
+                        if (cls) studentClass = cls.name;
+                    }
+                }
+                alerts.push({
+                    severity: 'critical',
+                    name: studentName,
+                    cls: studentClass,
+                    msg: `Unread Feedback: "${sub.description}" (Location: ${sub.location || 'General'})`
+                });
+            }
+        });
+
+        // 2. Low Merit Score Alerts (Warning Alerts)
+        (state.studentsList || []).forEach(student => {
+            if (student.merit_points !== undefined && student.merit_points < 45) {
+                const cls = state.classroomsList.find(c => c.id === student.class_id);
+                const className = cls ? cls.name : 'Unknown Class';
+                alerts.push({
+                    severity: 'warning',
+                    name: student.full_name,
+                    cls: className,
+                    msg: `Behavior Warning: Merit points dropped to ${student.merit_points} points.`
+                });
+            }
+        });
+
+        // 3. Missing Parent Contacts Alerts (Warning Alerts)
+        (state.studentsList || []).forEach(student => {
+            const hasFather = student.father_contact && student.father_contact.trim() !== '';
+            const hasMother = student.mother_contact && student.mother_contact.trim() !== '';
+            const hasGuardian = student.guardian_contact && student.guardian_contact.trim() !== '';
+            const hasEmail = student.parent_email && student.parent_email.trim() !== '';
+
+            if (!hasFather && !hasMother && !hasGuardian && !hasEmail) {
+                const cls = state.classroomsList.find(c => c.id === student.class_id);
+                const className = cls ? cls.name : 'Unknown Class';
+                alerts.push({
+                    severity: 'warning',
+                    name: student.full_name,
+                    cls: className,
+                    msg: `Missing Contact Info: No email or phone numbers configured for parents/guardians.`
+                });
+            }
+        });
+
+        // 4. Attendance Warnings
+        if (state.isSimulated) {
+            alerts.push({
+                severity: 'critical',
+                name: 'Fatimah Binti Mahmud',
+                cls: '3 Cempaka',
+                msg: 'Absent for 2 consecutive classes. Attendance is 83.3%.'
+            });
+            alerts.push({
+                severity: 'warning',
+                name: 'Ramu A/L Ganesan',
+                cls: '5 Dahlia',
+                msg: 'Low attendance rate: 80.0% (4/5 sessions).'
+            });
+        } else {
+            try {
+                const res = await authFetch(`${API_BASE}/attendance/warnings?school_id=${state.currentSchoolId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    (data.items || []).forEach(warn => {
+                        alerts.push({
+                            severity: warn.severity,
+                            name: warn.student_name,
+                            cls: warn.class_name,
+                            msg: warn.message
+                        });
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to fetch attendance warnings:", err);
+            }
+        }
+
+        // If no alerts found, show a clean state message
+        if (alerts.length === 0) {
+            alertsContainer.innerHTML = `
+            <div class="text-center py-6 text-slate-400">
+                <i class="fas fa-circle-check text-xl text-emerald-500 mb-2 block"></i>
+                <span class="text-xs font-semibold text-slate-500">All student records clear</span>
+            </div>`;
+            return;
+        }
 
         let html = '';
-        alerts.forEach(alert => {
+        alerts.slice(0, 5).forEach(alert => {
             const isCritical = alert.severity === 'critical';
             const bg = isCritical ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100';
             const iconColor = isCritical ? 'text-rose-500' : 'text-amber-500';
@@ -783,13 +1044,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         alertsContainer.innerHTML = html;
-
-        if (kpiAlerts) kpiAlerts.textContent = `${alerts.length} Warning${alerts.length !== 1 ? 's' : ''}`;
-        if (kpiAlertAction) {
-            const critCount = alerts.filter(a => a.severity === 'critical').length;
-            kpiAlertAction.textContent = critCount > 0 ? `${critCount} urgent action${critCount !== 1 ? 's' : ''} needed` : 'All under control';
-        }
     }
+    window.renderStudentAlerts = renderStudentAlerts;
+
+    function navigateToFeedbackInbox() {
+        window.pendingMeritSubTab = 'inbox';
+        window.location.hash = '#merit';
+    }
+    window.navigateToFeedbackInbox = navigateToFeedbackInbox;
 
     if (logoutBtn) {
         logoutBtn.addEventListener('click', (e) => {

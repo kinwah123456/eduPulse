@@ -183,3 +183,92 @@ def test_grade_submission_warnings_for_missing_contacts(client: TestClient, db_s
     assert len(data["warnings"]) > 0
     assert "Parent/guardian contact details missing" in data["warnings"][0]
     assert "John Doe" in data["warnings"][0]
+
+
+def test_feedback_deletion_path_traversal_protection(db_session: Session):
+    from app.models.merit import MeritSubmission
+    from app.services.merit_service import delete_feedback_submission
+    import os
+    import json
+
+    # Create a dummy file outside the uploads directory (e.g. in app/static/test_traversal.txt)
+    base_dir = os.path.abspath(os.path.join("app", "static"))
+    os.makedirs(base_dir, exist_ok=True)
+    secret_file_path = os.path.join(base_dir, "test_traversal.txt")
+    with open(secret_file_path, "w") as f:
+        f.write("sensitive data")
+
+    assert os.path.exists(secret_file_path)
+
+    # Create submission with path traversal image list
+    submission = MeritSubmission(
+        is_anonymous=True,
+        description="Test Traversal",
+        images=json.dumps(["/static/../test_traversal.txt"])
+    )
+    db_session.add(submission)
+    db_session.commit()
+
+    # Call delete
+    delete_feedback_submission(db_session, submission.id)
+
+    # Assert that the file was NOT deleted (path traversal was blocked)
+    assert os.path.exists(secret_file_path), "File outside the uploads folder was deleted (path traversal vulnerability!)"
+
+    # Cleanup the secret file
+    try:
+        os.remove(secret_file_path)
+    except Exception:
+        pass
+
+
+def test_batch_transaction_safety_savepoint(db_session: Session):
+    from app.models.student import Student
+    from app.models.merit import MeritOption, MeritLog
+    from app.services.automation_service import process_batch_merit
+
+    # 1. Setup a school and student
+    from app.models.school import School
+    school = School(name="Test School 8", code="TS08")
+    db_session.add(school)
+    db_session.flush()
+
+    student = Student(
+        student_id_number="S8001",
+        full_name="Valid Student",
+        school_id=school.id,
+        merit_points=50
+    )
+    db_session.add(student)
+
+    # Register admin/teacher user
+    user = User(email="admin8@school.com", hashed_password="hash", full_name="Admin 8", role="ADMIN")
+    db_session.add(user)
+    db_session.commit()
+
+    # Create merit option
+    option = MeritOption(name="Good Deed", points=10, is_active=True)
+    db_session.add(option)
+    db_session.commit()
+
+    # 2. Prepare batch rows: Row 1 is valid, Row 2 is invalid (student doesn't exist), Row 3 is valid
+    rows = [
+        {"_row_num": 1, "student_id_number": "S8001", "merit_option_name": "Good Deed", "points": "10", "justification": "Helper"},
+        {"_row_num": 2, "student_id_number": "INVALID999", "merit_option_name": "Good Deed", "points": "10", "justification": "None"},
+        {"_row_num": 3, "student_id_number": "S8001", "merit_option_name": "Good Deed", "points": "5", "justification": "Helper 2"}
+    ]
+
+    # Run batch import
+    results = process_batch_merit(db_session, rows, school_id=school.id, user_id=user.id)
+
+    # Verify results
+    assert len(results) == 3
+    assert results[0]["status"] == "success"
+    assert results[1]["status"] == "failed"
+    assert results[2]["status"] == "success" # With savepoints, the third row should still succeed!
+
+    # Refresh student from DB
+    db_session.refresh(student)
+    # The valid rows should have succeeded and accumulated points (50 + 10 + 5 = 65)
+    assert student.merit_points == 65, f"Expected 65 merit points, got {student.merit_points}"
+

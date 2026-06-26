@@ -173,35 +173,36 @@ def process_batch_teachers(db: Session, rows: list[dict], school_id: int) -> lis
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            emp_id = r.get("employee_id")
-            name = r.get("full_name")
-            if not emp_id or not name:
-                raise ValueError("employee_id and full_name are required columns")
-                
-            teacher = db.query(Teacher).filter(Teacher.employee_id == emp_id).first()
-            if teacher:
-                # Update existing
-                teacher.full_name = name
-                if "email" in r: teacher.email = r["email"] or None
-                if "contact_number" in r: teacher.contact_number = r["contact_number"] or None
-                if "emergency_contact" in r: teacher.emergency_contact = r["emergency_contact"] or None
-                if "is_active" in r: teacher.is_active = parse_bool(r["is_active"], True)
-                action = "updated"
-            else:
-                # Create new
-                teacher = Teacher(
-                    employee_id=emp_id,
-                    full_name=name,
-                    email=r.get("email") or None,
-                    contact_number=r.get("contact_number") or None,
-                    emergency_contact=r.get("emergency_contact") or None,
-                    school_id=school_id,
-                    is_active=parse_bool(r.get("is_active"), True)
-                )
-                db.add(teacher)
-                action = "created"
-                
-            db.flush()
+            with db.begin_nested():
+                emp_id = r.get("employee_id")
+                name = r.get("full_name")
+                if not emp_id or not name:
+                    raise ValueError("employee_id and full_name are required columns")
+                    
+                teacher = db.query(Teacher).filter(Teacher.employee_id == emp_id).first()
+                if teacher:
+                    # Update existing
+                    teacher.full_name = name
+                    if "email" in r: teacher.email = r["email"] or None
+                    if "contact_number" in r: teacher.contact_number = r["contact_number"] or None
+                    if "emergency_contact" in r: teacher.emergency_contact = r["emergency_contact"] or None
+                    if "is_active" in r: teacher.is_active = parse_bool(r["is_active"], True)
+                    action = "updated"
+                else:
+                    # Create new
+                    teacher = Teacher(
+                        employee_id=emp_id,
+                        full_name=name,
+                        email=r.get("email") or None,
+                        contact_number=r.get("contact_number") or None,
+                        emergency_contact=r.get("emergency_contact") or None,
+                        school_id=school_id,
+                        is_active=parse_bool(r.get("is_active"), True)
+                    )
+                    db.add(teacher)
+                    action = "created"
+                    
+                db.flush()
             results.append({
                 "row": row_num,
                 "identifier": emp_id,
@@ -227,45 +228,46 @@ def process_batch_classrooms(db: Session, rows: list[dict], school_id: int) -> l
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            name = r.get("name")
-            grade_str = r.get("grade_level")
-            if not name or not grade_str:
-                raise ValueError("name and grade_level are required columns")
-            
-            grade_level = int(grade_str)
-            capacity = int(r.get("capacity")) if r.get("capacity") else 40
-            
-            # Resolve form teacher
-            teacher_id = None
-            teacher_emp_id = r.get("form_teacher_employee_id")
-            if teacher_emp_id:
-                teacher = db.query(Teacher).filter(Teacher.employee_id == teacher_emp_id).first()
-                if not teacher:
-                    raise ValueError(f"Teacher with Employee ID '{teacher_emp_id}' not found")
-                teacher_id = teacher.id
+            with db.begin_nested():
+                name = r.get("name")
+                grade_str = r.get("grade_level")
+                if not name or not grade_str:
+                    raise ValueError("name and grade_level are required columns")
                 
-            classroom = db.query(SchoolClass).filter(
-                SchoolClass.name == name,
-                SchoolClass.school_id == school_id
-            ).first()
-            
-            if classroom:
-                classroom.grade_level = grade_level
-                classroom.capacity = capacity
-                classroom.form_teacher_id = teacher_id
-                action = "updated"
-            else:
-                classroom = SchoolClass(
-                    name=name,
-                    grade_level=grade_level,
-                    capacity=capacity,
-                    form_teacher_id=teacher_id,
-                    school_id=school_id
-                )
-                db.add(classroom)
-                action = "created"
+                grade_level = int(grade_str)
+                capacity = int(r.get("capacity")) if r.get("capacity") else 40
                 
-            db.flush()
+                # Resolve form teacher
+                teacher_id = None
+                teacher_emp_id = r.get("form_teacher_employee_id")
+                if teacher_emp_id:
+                    teacher = db.query(Teacher).filter(Teacher.employee_id == teacher_emp_id).first()
+                    if not teacher:
+                        raise ValueError(f"Teacher with Employee ID '{teacher_emp_id}' not found")
+                    teacher_id = teacher.id
+                    
+                classroom = db.query(SchoolClass).filter(
+                    SchoolClass.name == name,
+                    SchoolClass.school_id == school_id
+                ).first()
+                
+                if classroom:
+                    classroom.grade_level = grade_level
+                    classroom.capacity = capacity
+                    classroom.form_teacher_id = teacher_id
+                    action = "updated"
+                else:
+                    classroom = SchoolClass(
+                        name=name,
+                        grade_level=grade_level,
+                        capacity=capacity,
+                        form_teacher_id=teacher_id,
+                        school_id=school_id
+                    )
+                    db.add(classroom)
+                    action = "created"
+                    
+                db.flush()
             results.append({
                 "row": row_num,
                 "identifier": name,
@@ -291,53 +293,54 @@ def process_batch_students(db: Session, rows: list[dict], school_id: int) -> lis
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            student_id = r.get("student_id_number")
-            name = r.get("full_name")
-            if not student_id or not name:
-                raise ValueError("student_id_number and full_name are required columns")
+            with db.begin_nested():
+                student_id = r.get("student_id_number")
+                name = r.get("full_name")
+                if not student_id or not name:
+                    raise ValueError("student_id_number and full_name are required columns")
+                    
+                # Resolve class
+                class_id = None
+                class_name = r.get("class_name")
+                if class_name:
+                    classroom = db.query(SchoolClass).filter(
+                        SchoolClass.name == class_name,
+                        SchoolClass.school_id == school_id
+                    ).first()
+                    if not classroom:
+                        raise ValueError(f"Classroom '{class_name}' not found")
+                    class_id = classroom.id
+                    
+                student = db.query(Student).filter(Student.student_id_number == student_id).first()
                 
-            # Resolve class
-            class_id = None
-            class_name = r.get("class_name")
-            if class_name:
-                classroom = db.query(SchoolClass).filter(
-                    SchoolClass.name == class_name,
-                    SchoolClass.school_id == school_id
-                ).first()
-                if not classroom:
-                    raise ValueError(f"Classroom '{class_name}' not found")
-                class_id = classroom.id
+                student_data = {
+                    "student_id_number": student_id,
+                    "full_name": name,
+                    "class_id": class_id,
+                    "school_id": school_id,
+                    "is_active": parse_bool(r.get("is_active"), True),
+                    "merit_points": int(r["merit_points"]) if r.get("merit_points") else 50,
+                    "gender": r.get("gender") or None,
+                    "identity_card_number": r.get("identity_card_number") or None,
+                    "birth_date": parse_date_val(r.get("birth_date")),
+                    "enroll_date": parse_date_val(r.get("enroll_date")),
+                    "father_contact": r.get("father_contact") or None,
+                    "mother_contact": r.get("mother_contact") or None,
+                    "guardian_contact": r.get("guardian_contact") or None,
+                    "residential_address": r.get("residential_address") or None,
+                }
                 
-            student = db.query(Student).filter(Student.student_id_number == student_id).first()
-            
-            student_data = {
-                "student_id_number": student_id,
-                "full_name": name,
-                "class_id": class_id,
-                "school_id": school_id,
-                "is_active": parse_bool(r.get("is_active"), True),
-                "merit_points": int(r["merit_points"]) if r.get("merit_points") else 50,
-                "gender": r.get("gender") or None,
-                "identity_card_number": r.get("identity_card_number") or None,
-                "birth_date": parse_date_val(r.get("birth_date")),
-                "enroll_date": parse_date_val(r.get("enroll_date")),
-                "father_contact": r.get("father_contact") or None,
-                "mother_contact": r.get("mother_contact") or None,
-                "guardian_contact": r.get("guardian_contact") or None,
-                "residential_address": r.get("residential_address") or None,
-            }
-            
-            if student:
-                for k, v in student_data.items():
-                    if k in r or k in ("class_id", "birth_date", "enroll_date"):
-                        setattr(student, k, v)
-                action = "updated"
-            else:
-                student = Student(**student_data)
-                db.add(student)
-                action = "created"
-                
-            db.flush()
+                if student:
+                    for k, v in student_data.items():
+                        if k in r or k in ("class_id", "birth_date", "enroll_date"):
+                            setattr(student, k, v)
+                    action = "updated"
+                else:
+                    student = Student(**student_data)
+                    db.add(student)
+                    action = "created"
+                    
+                db.flush()
             results.append({
                 "row": row_num,
                 "identifier": student_id,
@@ -363,111 +366,112 @@ def process_batch_schedules(db: Session, rows: list[dict], school_id: int) -> li
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            tt_name = r.get("timetable_name")
-            class_name = r.get("class_name")
-            sub_code = r.get("subject_code")
-            teacher_emp_id = r.get("teacher_employee_id")
-            day_str = r.get("day_of_week")
-            period_str = r.get("period_number")
-            
-            if not class_name or not sub_code or not teacher_emp_id or not day_str or not period_str:
-                raise ValueError("class_name, subject_code, teacher_employee_id, day_of_week, and period_number are required")
+            with db.begin_nested():
+                tt_name = r.get("timetable_name")
+                class_name = r.get("class_name")
+                sub_code = r.get("subject_code")
+                teacher_emp_id = r.get("teacher_employee_id")
+                day_str = r.get("day_of_week")
+                period_str = r.get("period_number")
                 
-            day_of_week = parse_day_of_week(day_str)
-            period_number = int(period_str)
-            
-            # Find/Create Timetable
-            if tt_name:
-                timetable = db.query(Timetable).filter(
-                    Timetable.name == tt_name,
-                    Timetable.school_id == school_id
+                if not class_name or not sub_code or not teacher_emp_id or not day_str or not period_str:
+                    raise ValueError("class_name, subject_code, teacher_employee_id, day_of_week, and period_number are required")
+                    
+                day_of_week = parse_day_of_week(day_str)
+                period_number = int(period_str)
+                
+                # Find/Create Timetable
+                if tt_name:
+                    timetable = db.query(Timetable).filter(
+                        Timetable.name == tt_name,
+                        Timetable.school_id == school_id
+                    ).first()
+                    if not timetable:
+                        timetable = Timetable(name=tt_name, school_id=school_id, term="Term 1", is_active=True)
+                        db.add(timetable)
+                        db.flush()
+                else:
+                    # Fallback to active timetable or first, or create
+                    timetable = db.query(Timetable).filter(
+                        Timetable.school_id == school_id,
+                        Timetable.is_active == True
+                    ).first()
+                    if not timetable:
+                        timetable = db.query(Timetable).filter(Timetable.school_id == school_id).first()
+                    if not timetable:
+                        timetable = Timetable(name="Active Timetable", school_id=school_id, term="Term 1", is_active=True)
+                        db.add(timetable)
+                        db.flush()
+                
+                # Resolve class
+                classroom = db.query(SchoolClass).filter(
+                    SchoolClass.name == class_name,
+                    SchoolClass.school_id == school_id
                 ).first()
-                if not timetable:
-                    timetable = Timetable(name=tt_name, school_id=school_id, term="Term 1", is_active=True)
-                    db.add(timetable)
-                    db.flush()
-            else:
-                # Fallback to active timetable or first, or create
-                timetable = db.query(Timetable).filter(
-                    Timetable.school_id == school_id,
-                    Timetable.is_active == True
+                if not classroom:
+                    raise ValueError(f"Classroom '{class_name}' not found")
+                    
+                # Resolve Subject
+                subject = db.query(Subject).filter(
+                    Subject.code == sub_code,
+                    Subject.school_id == school_id
                 ).first()
-                if not timetable:
-                    timetable = db.query(Timetable).filter(Timetable.school_id == school_id).first()
-                if not timetable:
-                    timetable = Timetable(name="Active Timetable", school_id=school_id, term="Term 1", is_active=True)
-                    db.add(timetable)
+                if not subject:
+                    # Create subject dynamically
+                    subject = Subject(code=sub_code, name=sub_code, school_id=school_id)
+                    db.add(subject)
                     db.flush()
-            
-            # Resolve class
-            classroom = db.query(SchoolClass).filter(
-                SchoolClass.name == class_name,
-                SchoolClass.school_id == school_id
-            ).first()
-            if not classroom:
-                raise ValueError(f"Classroom '{class_name}' not found")
+                    
+                # Resolve Teacher
+                teacher = db.query(Teacher).filter(
+                    Teacher.employee_id == teacher_emp_id,
+                    Teacher.school_id == school_id
+                ).first()
+                if not teacher:
+                    raise ValueError(f"Teacher '{teacher_emp_id}' not found")
+                    
+                # Get/Create TimeSlot
+                timeslot = get_or_create_timeslot(db, school_id, day_of_week, period_number)
                 
-            # Resolve Subject
-            subject = db.query(Subject).filter(
-                Subject.code == sub_code,
-                Subject.school_id == school_id
-            ).first()
-            if not subject:
-                # Create subject dynamically
-                subject = Subject(code=sub_code, name=sub_code, school_id=school_id)
-                db.add(subject)
-                db.flush()
+                # Check Classroom conflict - if classroom has another entry at this slot, update it or raise error.
+                # To be friendly, we update/overwrite if same class, but raise conflict if the *teacher* is busy elsewhere.
+                existing_class_entry = db.query(ScheduleEntry).filter(
+                    ScheduleEntry.timetable_id == timetable.id,
+                    ScheduleEntry.class_id == classroom.id,
+                    ScheduleEntry.time_slot_id == timeslot.id
+                ).first()
                 
-            # Resolve Teacher
-            teacher = db.query(Teacher).filter(
-                Teacher.employee_id == teacher_emp_id,
-                Teacher.school_id == school_id
-            ).first()
-            if not teacher:
-                raise ValueError(f"Teacher '{teacher_emp_id}' not found")
-                
-            # Get/Create TimeSlot
-            timeslot = get_or_create_timeslot(db, school_id, day_of_week, period_number)
-            
-            # Check Classroom conflict - if classroom has another entry at this slot, update it or raise error.
-            # To be friendly, we update/overwrite if same class, but raise conflict if the *teacher* is busy elsewhere.
-            existing_class_entry = db.query(ScheduleEntry).filter(
-                ScheduleEntry.timetable_id == timetable.id,
-                ScheduleEntry.class_id == classroom.id,
-                ScheduleEntry.time_slot_id == timeslot.id
-            ).first()
-            
-            # Check if teacher is busy elsewhere at this slot
-            teacher_conflict = db.query(ScheduleEntry).filter(
-                ScheduleEntry.timetable_id == timetable.id,
-                ScheduleEntry.teacher_id == teacher.id,
-                ScheduleEntry.time_slot_id == timeslot.id
-            )
-            if existing_class_entry:
-                teacher_conflict = teacher_conflict.filter(ScheduleEntry.id != existing_class_entry.id)
-            teacher_conflict = teacher_conflict.first()
-            
-            if teacher_conflict:
-                conflict_class = db.query(SchoolClass).filter(SchoolClass.id == teacher_conflict.class_id).first()
-                conflict_class_name = conflict_class.name if conflict_class else "another class"
-                raise ConflictException(f"Teacher {teacher.full_name} is already teaching {conflict_class_name} at this time slot.")
-                
-            if existing_class_entry:
-                existing_class_entry.subject_id = subject.id
-                existing_class_entry.teacher_id = teacher.id
-                action = "updated"
-            else:
-                new_entry = ScheduleEntry(
-                    timetable_id=timetable.id,
-                    class_id=classroom.id,
-                    subject_id=subject.id,
-                    teacher_id=teacher.id,
-                    time_slot_id=timeslot.id
+                # Check if teacher is busy elsewhere at this slot
+                teacher_conflict = db.query(ScheduleEntry).filter(
+                    ScheduleEntry.timetable_id == timetable.id,
+                    ScheduleEntry.teacher_id == teacher.id,
+                    ScheduleEntry.time_slot_id == timeslot.id
                 )
-                db.add(new_entry)
-                action = "created"
+                if existing_class_entry:
+                    teacher_conflict = teacher_conflict.filter(ScheduleEntry.id != existing_class_entry.id)
+                teacher_conflict = teacher_conflict.first()
                 
-            db.flush()
+                if teacher_conflict:
+                    conflict_class = db.query(SchoolClass).filter(SchoolClass.id == teacher_conflict.class_id).first()
+                    conflict_class_name = conflict_class.name if conflict_class else "another class"
+                    raise ConflictException(f"Teacher {teacher.full_name} is already teaching {conflict_class_name} at this time slot.")
+                    
+                if existing_class_entry:
+                    existing_class_entry.subject_id = subject.id
+                    existing_class_entry.teacher_id = teacher.id
+                    action = "updated"
+                else:
+                    new_entry = ScheduleEntry(
+                        timetable_id=timetable.id,
+                        class_id=classroom.id,
+                        subject_id=subject.id,
+                        teacher_id=teacher.id,
+                        time_slot_id=timeslot.id
+                    )
+                    db.add(new_entry)
+                    action = "created"
+                    
+                db.flush()
             results.append({
                 "row": row_num,
                 "identifier": f"Period {period_number} - {class_name}",
@@ -493,78 +497,79 @@ def process_batch_attendance(db: Session, rows: list[dict], school_id: int, user
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            student_id_num = r.get("student_id_number")
-            date_str = r.get("date")
-            status_str = r.get("status")
-            period_str = r.get("period_number")
-            notes = r.get("notes") or ""
-            
-            if not student_id_num or not date_str or not status_str:
-                raise ValueError("student_id_number, date, and status are required columns")
+            with db.begin_nested():
+                student_id_num = r.get("student_id_number")
+                date_str = r.get("date")
+                status_str = r.get("status")
+                period_str = r.get("period_number")
+                notes = r.get("notes") or ""
                 
-            rec_date = parse_date_val(date_str)
-            status = status_str.strip().upper()
-            if status not in ("PRESENT", "ABSENT", "LATE", "EXCUSED"):
-                raise ValueError("status must be PRESENT, ABSENT, LATE, or EXCUSED")
+                if not student_id_num or not date_str or not status_str:
+                    raise ValueError("student_id_number, date, and status are required columns")
+                    
+                rec_date = parse_date_val(date_str)
+                status = status_str.strip().upper()
+                if status not in ("PRESENT", "ABSENT", "LATE", "EXCUSED"):
+                    raise ValueError("status must be PRESENT, ABSENT, LATE, or EXCUSED")
+                    
+                # Find Student
+                student = db.query(Student).filter(
+                    Student.student_id_number == student_id_num,
+                    Student.school_id == school_id
+                ).first()
+                if not student:
+                    raise ValueError(f"Student '{student_id_num}' not found")
+                if not student.class_id:
+                    raise ValueError(f"Student '{student_id_num}' is not assigned to any classroom")
+                    
+                # Get Timeslot if period attendance
+                timeslot_id = None
+                if period_str:
+                    period_num = int(period_str)
+                    # Day of week from date: Monday is 0, Sunday is 6
+                    day_of_week = rec_date.weekday()
+                    timeslot = get_or_create_timeslot(db, school_id, day_of_week, period_num)
+                    timeslot_id = timeslot.id
+                    
+                # Find or create session
+                session = db.query(AttendanceSession).filter(
+                    AttendanceSession.class_id == student.class_id,
+                    AttendanceSession.date == rec_date,
+                    AttendanceSession.time_slot_id == timeslot_id
+                ).first()
                 
-            # Find Student
-            student = db.query(Student).filter(
-                Student.student_id_number == student_id_num,
-                Student.school_id == school_id
-            ).first()
-            if not student:
-                raise ValueError(f"Student '{student_id_num}' not found")
-            if not student.class_id:
-                raise ValueError(f"Student '{student_id_num}' is not assigned to any classroom")
+                if not session:
+                    session = AttendanceSession(
+                        class_id=student.class_id,
+                        date=rec_date,
+                        time_slot_id=timeslot_id,
+                        recorded_by_id=user_id,
+                        method="MANUAL"
+                    )
+                    db.add(session)
+                    db.flush()
+                    
+                # Find or create record
+                record = db.query(AttendanceRecord).filter(
+                    AttendanceRecord.session_id == session.id,
+                    AttendanceRecord.student_id == student.id
+                ).first()
                 
-            # Get Timeslot if period attendance
-            timeslot_id = None
-            if period_str:
-                period_num = int(period_str)
-                # Day of week from date: Monday is 0, Sunday is 6
-                day_of_week = rec_date.weekday()
-                timeslot = get_or_create_timeslot(db, school_id, day_of_week, period_num)
-                timeslot_id = timeslot.id
-                
-            # Find or create session
-            session = db.query(AttendanceSession).filter(
-                AttendanceSession.class_id == student.class_id,
-                AttendanceSession.date == rec_date,
-                AttendanceSession.time_slot_id == timeslot_id
-            ).first()
-            
-            if not session:
-                session = AttendanceSession(
-                    class_id=student.class_id,
-                    date=rec_date,
-                    time_slot_id=timeslot_id,
-                    recorded_by_id=user_id,
-                    method="MANUAL"
-                )
-                db.add(session)
+                if record:
+                    record.status = status
+                    record.notes = notes
+                    action = "updated"
+                else:
+                    record = AttendanceRecord(
+                        session_id=session.id,
+                        student_id=student.id,
+                        status=status,
+                        notes=notes
+                    )
+                    db.add(record)
+                    action = "created"
+                    
                 db.flush()
-                
-            # Find or create record
-            record = db.query(AttendanceRecord).filter(
-                AttendanceRecord.session_id == session.id,
-                AttendanceRecord.student_id == student.id
-            ).first()
-            
-            if record:
-                record.status = status
-                record.notes = notes
-                action = "updated"
-            else:
-                record = AttendanceRecord(
-                    session_id=session.id,
-                    student_id=student.id,
-                    status=status,
-                    notes=notes
-                )
-                db.add(record)
-                action = "created"
-                
-            db.flush()
             results.append({
                 "row": row_num,
                 "identifier": student_id_num,
@@ -590,51 +595,52 @@ def process_batch_merit(db: Session, rows: list[dict], school_id: int, user_id: 
     for r in rows:
         row_num = r.get("_row_num")
         try:
-            student_id_num = r.get("student_id_number")
-            opt_name = r.get("merit_option_name")
-            justification = r.get("justification") or opt_name or "Batch Point Adjustment"
-            pts_str = r.get("points")
-            
-            if not student_id_num or not opt_name:
-                raise ValueError("student_id_number and merit_option_name are required columns")
+            with db.begin_nested():
+                student_id_num = r.get("student_id_number")
+                opt_name = r.get("merit_option_name")
+                justification = r.get("justification") or opt_name or "Batch Point Adjustment"
+                pts_str = r.get("points")
                 
-            # Resolve student
-            student = db.query(Student).filter(
-                Student.student_id_number == student_id_num,
-                Student.school_id == school_id
-            ).first()
-            if not student:
-                raise ValueError(f"Student '{student_id_num}' not found")
+                if not student_id_num or not opt_name:
+                    raise ValueError("student_id_number and merit_option_name are required columns")
+                    
+                # Resolve student
+                student = db.query(Student).filter(
+                    Student.student_id_number == student_id_num,
+                    Student.school_id == school_id
+                ).first()
+                if not student:
+                    raise ValueError(f"Student '{student_id_num}' not found")
+                    
+                # Resolve or create merit option
+                merit_option = db.query(MeritOption).filter(MeritOption.name == opt_name).first()
+                if not merit_option:
+                    # Deduce points
+                    pts = int(pts_str) if pts_str else 10
+                    merit_option = MeritOption(name=opt_name, points=pts, is_active=True)
+                    db.add(merit_option)
+                    db.flush()
+                elif pts_str:
+                    # Update points if explicitly provided
+                    merit_option.points = int(pts_str)
+                    db.flush()
+                    
+                if not merit_option.is_active:
+                    raise ValueError(f"Merit option '{opt_name}' is inactive and cannot be used")
+                    
+                # Award points and log transaction
+                student.merit_points += merit_option.points
                 
-            # Resolve or create merit option
-            merit_option = db.query(MeritOption).filter(MeritOption.name == opt_name).first()
-            if not merit_option:
-                # Deduce points
-                pts = int(pts_str) if pts_str else 10
-                merit_option = MeritOption(name=opt_name, points=pts, is_active=True)
-                db.add(merit_option)
+                log = MeritLog(
+                    student_id=student.id,
+                    user_id=user_id,
+                    merit_option_id=merit_option.id,
+                    points_changed=merit_option.points,
+                    justification=justification
+                )
+                db.add(log)
                 db.flush()
-            elif pts_str:
-                # Update points if explicitly provided
-                merit_option.points = int(pts_str)
-                db.flush()
                 
-            if not merit_option.is_active:
-                raise ValueError(f"Merit option '{opt_name}' is inactive and cannot be used")
-                
-            # Award points and log transaction
-            student.merit_points += merit_option.points
-            
-            log = MeritLog(
-                student_id=student.id,
-                user_id=user_id,
-                merit_option_id=merit_option.id,
-                points_changed=merit_option.points,
-                justification=justification
-            )
-            db.add(log)
-            db.flush()
-            
             action_desc = "awarded" if merit_option.points >= 0 else "reduced"
             results.append({
                 "row": row_num,

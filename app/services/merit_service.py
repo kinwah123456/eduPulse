@@ -82,8 +82,8 @@ def award_merit_points(db: Session, user_id: int, student_id: int, option_id: in
     return log
 
 
-def get_merit_logs(db: Session) -> list[MeritLog]:
-    return db.query(MeritLog).order_by(MeritLog.created_at.desc()).all()
+def get_merit_logs(db: Session, skip: int = 0, limit: int = 100) -> list[MeritLog]:
+    return db.query(MeritLog).order_by(MeritLog.created_at.desc()).offset(skip).limit(limit).all()
 
 
 def delete_merit_log(db: Session, log_id: int) -> None:
@@ -118,12 +118,12 @@ def create_feedback_submission(
                 continue
             ext = os.path.splitext(file.filename)[1].lower()
             if ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
-                continue
+                raise ValidationException(f"Unsupported file extension {ext}. Only image files (.jpg, .jpeg, .png, .gif, .webp) are allowed.")
+            import shutil
             unique_name = f"{uuid.uuid4()}{ext}"
             file_path = os.path.join(upload_dir, unique_name)
-            content = file.file.read()
-            with open(file_path, "wb") as f:
-                f.write(content)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
             saved_paths.append(f"/static/feedback_uploads/{unique_name}")
 
     student_id = None
@@ -158,8 +158,8 @@ def create_feedback_submission(
     return submission
 
 
-def get_feedback_submissions(db: Session) -> list[MeritSubmission]:
-    return db.query(MeritSubmission).order_by(MeritSubmission.created_at.desc()).all()
+def get_feedback_submissions(db: Session, skip: int = 0, limit: int = 100) -> list[MeritSubmission]:
+    return db.query(MeritSubmission).order_by(MeritSubmission.created_at.desc()).offset(skip).limit(limit).all()
 
 
 def acknowledge_feedback_submission(db: Session, submission_id: int, user_id: int) -> MeritSubmission:
@@ -185,6 +185,7 @@ def cleanup_expired_feedback_submissions(db: Session, max_age_days: int = 365) -
     expired_subs = db.query(MeritSubmission).filter(MeritSubmission.created_at < cutoff).all()
     count = len(expired_subs)
     
+    base_dir = os.path.abspath(os.path.join("app", "static", "feedback_uploads"))
     for sub in expired_subs:
         if sub.images:
             try:
@@ -192,8 +193,8 @@ def cleanup_expired_feedback_submissions(db: Session, max_age_days: int = 365) -
                 for path in paths:
                     if path.startswith("/static/"):
                         # Convert /static/... to app/static/...
-                        fs_path = os.path.join("app", "static", path.replace("/static/", "", 1))
-                        if os.path.exists(fs_path):
+                        fs_path = os.path.abspath(os.path.join("app", "static", path.replace("/static/", "", 1)))
+                        if fs_path.startswith(base_dir) and os.path.exists(fs_path):
                             os.remove(fs_path)
             except Exception as e:
                 print(f"Failed to remove submission image: {e}")
@@ -211,14 +212,15 @@ def delete_feedback_submission(db: Session, submission_id: int) -> None:
     if not submission:
         raise NotFoundException(f"Feedback submission with id {submission_id} not found")
         
+    base_dir = os.path.abspath(os.path.join("app", "static", "feedback_uploads"))
     if submission.images:
         try:
             paths = json.loads(submission.images)
             for path in paths:
                 if path.startswith("/static/"):
                     # Convert /static/... to app/static/...
-                    fs_path = os.path.join("app", "static", path.replace("/static/", "", 1))
-                    if os.path.exists(fs_path):
+                    fs_path = os.path.abspath(os.path.join("app", "static", path.replace("/static/", "", 1)))
+                    if fs_path.startswith(base_dir) and os.path.exists(fs_path):
                         os.remove(fs_path)
         except Exception as e:
             print(f"Failed to remove submission image on delete: {e}")

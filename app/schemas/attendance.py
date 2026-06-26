@@ -91,3 +91,18 @@ class EdgeAttendanceIngest(BaseModel):
     time_slot_id: int | None = None
     method: str = "CV_FACE"
     records: list[EdgeAttendanceRecord]
+
+
+class AttendanceWarningResponse(BaseModel):
+    student_id: int
+    student_name: str
+    class_name: str
+    warning_type: str
+    message: str
+    severity: str
+
+
+class AttendanceWarningListResponse(BaseModel):
+    total: int
+    items: list[AttendanceWarningResponse]
+

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     APP_NAME: str = "EduPulse Ops"
     DEBUG: bool = True
+    OCR_POOL_WORKERS: int = 4
+    WEBHOOK_TOKEN: str = "edupulse_secret_token"
 
 
 settings = Settings()

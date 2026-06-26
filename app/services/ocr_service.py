@@ -6,22 +6,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-from concurrent.futures import ThreadPoolExecutor
-_sync_executor = ThreadPoolExecutor(max_workers=4)
-
-def run_sync(coro):
-    """Helper to run an async coroutine synchronously, handling running event loops."""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-    if loop.is_running():
-        future = _sync_executor.submit(lambda: asyncio.run(coro))
-        return future.result()
-    else:
-        return loop.run_until_complete(coro)
+from app.core.concurrency import run_sync
 
 
 class OCRManager:

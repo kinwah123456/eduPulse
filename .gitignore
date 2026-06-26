@@ -56,3 +56,5 @@ app/static/feedback_uploads/
 *.zip
 !Sample Submissions.zip
 
+# Test artifacts
+tests/qa_test_results.json

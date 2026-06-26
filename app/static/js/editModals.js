@@ -210,6 +210,10 @@ export function openEditModal(type, id) {
                             <span class="text-xs font-semibold text-slate-500">Guardian's Contact</span>
                             <span class="font-bold text-slate-800 font-mono">${student.guardian_contact || '<span class="text-slate-400 italic font-normal">None</span>'}</span>
                         </div>
+                        <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <span class="text-xs font-semibold text-slate-500">Parents / Guardians Email</span>
+                            <span class="font-bold text-slate-800 font-mono">${student.parent_email || '<span class="text-slate-400 italic font-normal">None</span>'}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -314,6 +318,12 @@ export function openEditModal(type, id) {
                 <div>
                     <label for="edit-student-guardian-contact" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Guardian Contact No.</label>
                     <input type="text" id="edit-student-guardian-contact" value="${student.guardian_contact || ''}"
+                        class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-medium text-slate-800 outline-none transition-all">
+                </div>
+
+                <div>
+                    <label for="edit-student-parent-email" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Parents / Guardians Email</label>
+                    <input type="email" id="edit-student-parent-email" value="${student.parent_email || ''}"
                         class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white rounded-xl border border-slate-200 focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/20 text-sm font-medium text-slate-800 outline-none transition-all">
                 </div>
 
@@ -738,6 +748,7 @@ export async function submitEditStudent(event, studentId) {
     const father_contact = document.getElementById('edit-student-father-contact').value;
     const mother_contact = document.getElementById('edit-student-mother-contact').value;
     const guardian_contact = document.getElementById('edit-student-guardian-contact').value;
+    const parent_email = document.getElementById('edit-student-parent-email').value || null;
     const residential_address = document.getElementById('edit-student-address').value;
 
     const payload = { 
@@ -752,6 +763,7 @@ export async function submitEditStudent(event, studentId) {
         father_contact,
         mother_contact,
         guardian_contact,
+        parent_email,
         residential_address
     };
 
@@ -770,6 +782,7 @@ export async function submitEditStudent(event, studentId) {
                 student.father_contact = father_contact;
                 student.mother_contact = mother_contact;
                 student.guardian_contact = guardian_contact;
+                student.parent_email = parent_email;
                 student.residential_address = residential_address;
                 showToast(`Student "${full_name}" updated successfully`);
             }

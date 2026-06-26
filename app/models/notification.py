@@ -49,6 +49,7 @@ class NotificationLog(Base):
     status: Mapped[str] = mapped_column(String(50))  # "SENT", "FAILED"
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reference_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Store session_id or grade_id
+    smtp_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Relationship with Student for convenience

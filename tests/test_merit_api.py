@@ -436,4 +436,32 @@ def test_feedback_submission_rate_limiting(client: TestClient, db_session: Sessi
     IP_REQUESTS.clear()
 
 
+def test_merit_api_pagination(client: TestClient, db_session: Session):
+    # Setup login
+    # Register Admin & Login
+    client.post("/api/v1/auth/register", json={
+        "email": "admin_pag@merit.local",
+        "password": "admin123",
+        "full_name": "Pag Admin",
+        "role": "ADMIN"
+    })
+    
+    resp = client.post("/api/v1/auth/login", data={
+        "username": "admin_pag@merit.local",
+        "password": "admin123"
+    })
+    token = resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Query merit submissions list with limit=1, skip=0
+    resp = client.get("/api/v1/merit/submissions?limit=1&skip=0", headers=headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) <= 1
+
+    # Query merit logs list with limit=1, skip=0
+    resp = client.get("/api/v1/merit/logs?limit=1&skip=0", headers=headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) <= 1
+
+
 

@@ -91,6 +91,11 @@ def main():
                 full_name=name,
                 class_id=classes[class_idx].id,
                 school_id=school.id,
+                father_contact=f"+6012-345678{i:01d}",
+                mother_contact=f"+6019-123456{i:02d}",
+                parent_email=f"parent_{i}@edupulse.local",
+                gender="MALE" if i % 2 == 0 else "FEMALE",
+                identity_card_number=f"120101-14-{i:04d}"
             )
             db.add(s)
             students.append(s)

@@ -44,3 +44,19 @@ class StudentGrade(TimestampMixin, Base):
 
     def __repr__(self) -> str:
         return f"<StudentGrade {self.id}: Student {self.student_id} Assessment {self.assessment_id} Score {self.score}>"
+
+
+class BatchOMRRecord(TimestampMixin, Base):
+    __tablename__ = "batch_omr_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    assessment_id: Mapped[int] = mapped_column(ForeignKey("assessments.id", ondelete="CASCADE"))
+    filename: Mapped[str] = mapped_column(String(255), default="Batch OMR Results")
+    data: Mapped[str] = mapped_column(Text)  # JSON representation of all graded student sheets
+
+    # Relationships
+    assessment = relationship("Assessment")
+
+    def __repr__(self) -> str:
+        return f"<BatchOMRRecord {self.id}: Assessment {self.assessment_id}>"
+

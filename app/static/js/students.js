@@ -311,6 +311,7 @@ if (enrollStudentForm) {
         const father_contact = document.getElementById('student-father-contact').value;
         const mother_contact = document.getElementById('student-mother-contact').value;
         const guardian_contact = document.getElementById('student-guardian-contact').value;
+        const parent_email = document.getElementById('student-parent-email').value || null;
         const residential_address = document.getElementById('student-address').value;
 
         const payload = {
@@ -326,6 +327,7 @@ if (enrollStudentForm) {
             father_contact,
             mother_contact,
             guardian_contact,
+            parent_email,
             residential_address
         };
 
@@ -346,6 +348,7 @@ if (enrollStudentForm) {
                     father_contact,
                     mother_contact,
                     guardian_contact,
+                    parent_email,
                     residential_address
                 };
                 mockStudents.push(newStudent);

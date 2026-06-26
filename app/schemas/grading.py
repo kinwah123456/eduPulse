@@ -89,5 +89,17 @@ class BatchGradeConfirmRequest(BaseModel):
     assessment_id: int
     grades: list[BatchGradeConfirmItem]
     session_id: str | None = None
+    filename: str | None = None
+
+
+class BatchOMRRecordUpdateItem(BaseModel):
+    student_id: int
+    student_response: str  # JSON string of answers
+
+
+class BatchOMRRecordUpdateRequest(BaseModel):
+    filename: str | None = None
+    grades: list[BatchOMRRecordUpdateItem] | None = None
+
 
 

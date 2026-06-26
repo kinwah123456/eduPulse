@@ -12,6 +12,7 @@ from app.schemas.attendance import (
     AttendanceSessionCreate, AttendanceSessionResponse, AttendanceSessionListResponse,
     AttendanceRecordCreate, AttendanceRecordUpdate, AttendanceRecordResponse,
     BulkAttendanceCreate, AttendanceSessionDetailResponse, EdgeAttendanceIngest,
+    AttendanceWarningListResponse,
 )
 from app.services import attendance_service
 
@@ -144,3 +145,24 @@ def ingest_attendance(
     resp = AttendanceSessionDetailResponse.model_validate(detail)
     resp.warnings = warnings
     return resp
+
+
+@router.get("/rate")
+def get_attendance_rate(
+    school_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    rate = attendance_service.get_attendance_rate(db, school_id)
+    return {"rate": rate}
+
+
+@router.get("/warnings", response_model=AttendanceWarningListResponse)
+def list_attendance_warnings(
+    school_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user)
+):
+    items = attendance_service.get_attendance_warnings(db, school_id)
+    return AttendanceWarningListResponse(total=len(items), items=items)
+

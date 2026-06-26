@@ -58,7 +58,9 @@ export async function loadMeritViewData() {
         }
     }
 
-    switchMeritSubTab('roster');
+    const defaultTab = window.pendingMeritSubTab || 'roster';
+    delete window.pendingMeritSubTab;
+    switchMeritSubTab(defaultTab);
 
     if (state.classroomsList.length === 0) {
         await fetchClassroomsForFilter();
@@ -473,6 +475,9 @@ export async function loadFeedbackSubmissions() {
 }
 
 export function renderFeedbackSubmissions() {
+    const unreadCount = feedbackSubmissionsList.filter(sub => sub.status === 'unread').length;
+    updateUnreadFeedbackBadge(unreadCount);
+
     const tableBody = document.getElementById('merit-inbox-table-body');
     if (!tableBody) return;
 
@@ -589,9 +594,6 @@ export function renderFeedbackSubmissions() {
                 <td class="py-4 px-6 text-sm text-right">${actionHtml}</td>
             </tr>`;
     });
-
-    const unreadCount = feedbackSubmissionsList.filter(sub => sub.status === 'unread').length;
-    updateUnreadFeedbackBadge(unreadCount);
 }
 
 export function updateUnreadFeedbackBadge(unreadCount) {
@@ -600,29 +602,59 @@ export function updateUnreadFeedbackBadge(unreadCount) {
     const dotSolid = document.getElementById('sidebar-merit-dot-solid');
     const tabBadge = document.getElementById('inbox-unread-count');
     
-    if (!badge || !dot || !dotSolid || !tabBadge) return;
+    if (tabBadge) {
+        if (unreadCount > 0) {
+            tabBadge.textContent = unreadCount;
+            tabBadge.classList.remove('hidden');
+        } else {
+            tabBadge.classList.add('hidden');
+        }
+    }
     
-    if (unreadCount > 0) {
-        tabBadge.textContent = unreadCount;
-        tabBadge.classList.remove('hidden');
-        
-        badge.textContent = unreadCount;
-        badge.classList.remove('hidden');
-        
-        const sidebarEl = document.getElementById('sidebar');
-        const isCollapsed = sidebarEl && sidebarEl.classList.contains('w-20');
-        if (isCollapsed) {
-            dot.classList.remove('hidden');
-            dotSolid.classList.remove('hidden');
+    if (badge) {
+        if (unreadCount > 0) {
+            badge.textContent = unreadCount;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    if (dot && dotSolid) {
+        if (unreadCount > 0) {
+            const sidebarEl = document.getElementById('sidebar');
+            const isCollapsed = sidebarEl && sidebarEl.classList.contains('w-20');
+            if (isCollapsed) {
+                dot.classList.remove('hidden');
+                dotSolid.classList.remove('hidden');
+            } else {
+                dot.classList.add('hidden');
+                dotSolid.classList.add('hidden');
+            }
         } else {
             dot.classList.add('hidden');
             dotSolid.classList.add('hidden');
         }
-    } else {
-        tabBadge.classList.add('hidden');
-        badge.classList.add('hidden');
-        dot.classList.add('hidden');
-        dotSolid.classList.add('hidden');
+    }
+
+    // Update Dashboard KPI Card
+    const kpiAlerts = document.getElementById('kpi-alerts');
+    const kpiAlertAction = document.getElementById('kpi-alert-action');
+    if (kpiAlerts) {
+        kpiAlerts.textContent = `${unreadCount} Unread`;
+    }
+    if (kpiAlertAction) {
+        if (unreadCount > 0) {
+            kpiAlertAction.innerHTML = `<i class="fas fa-exclamation-circle text-[10px]"></i> Requires review`;
+            kpiAlertAction.className = "text-xs text-brand-teal font-medium mt-1 inline-flex items-center gap-1 hover:text-teal-700 transition-colors";
+        } else {
+            kpiAlertAction.innerHTML = `<i class="fas fa-inbox text-[10px]"></i> Inbox up to date`;
+            kpiAlertAction.className = "text-xs text-slate-400 font-medium mt-1 inline-flex items-center gap-1";
+        }
+    }
+
+    if (window.renderStudentAlerts) {
+        window.renderStudentAlerts();
     }
 }
 

@@ -22,6 +22,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return TokenResponse(access_token=token)
 
 
+@router.post("/judge-login", response_model=TokenResponse)
+def judge_login(db: Session = Depends(get_db)):
+    """Authenticate judge as an admin and return JWT token."""
+    # Find the first admin user in the system
+    user = db.query(User).filter(User.role == "ADMIN").first()
+    if not user:
+        # Auto-create the default administrator if not present
+        user = auth_service.register_user(
+            db=db,
+            email="admin@edupulse.local",
+            password="admin123",
+            full_name="System Administrator (Judge)",
+            role="ADMIN"
+        )
+    token = auth_service.create_token_for_user(user)
+    return TokenResponse(access_token=token)
+
+
 @router.post("/register", response_model=UserResponse)
 def register(request: Request, body: UserCreate, db: Session = Depends(get_db)):
     """Register a new user.

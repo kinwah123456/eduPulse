@@ -124,3 +124,99 @@ def get_session_with_records(db: Session, session_id: int) -> AttendanceSession:
     if not session:
         raise NotFoundException(f"Attendance session {session_id} not found")
     return session
+
+
+def get_attendance_rate(db: Session, school_id: int | None = None) -> float:
+    """Calculate actual attendance percentage based on historical records.
+    
+    Formula: (PRESENT + LATE + EXCUSED) / TOTAL * 100
+    If no records exist, return a default healthy rate (95.0%).
+    """
+    from app.models.attendance import AttendanceRecord, AttendanceSession
+    from app.models.student import Student
+    
+    query = db.query(AttendanceRecord)
+    if school_id is not None:
+        query = query.join(AttendanceSession).join(Student, Student.id == AttendanceRecord.student_id).filter(Student.school_id == school_id)
+        
+    total_records = query.count()
+    if total_records == 0:
+        return 95.0
+        
+    # Count ABSENT vs other statuses
+    absent_count = query.filter(AttendanceRecord.status == "ABSENT").count()
+    present_count = total_records - absent_count
+    
+    rate = (present_count / total_records) * 100.0
+    return round(rate, 1)
+
+
+def get_attendance_warnings(db: Session, school_id: int | None = None) -> list[dict]:
+    """Analyze student attendance records for warnings.
+    
+    1. Consecutive Absences: 2 or more consecutive absences (status == 'ABSENT').
+    2. Low Attendance Rate: < 85% attendance rate (minimum 3 records).
+    """
+    from app.models.attendance import AttendanceRecord, AttendanceSession
+    from app.models.student import Student
+    from app.models.academic import SchoolClass
+
+    # Fetch active students for this school
+    students_query = db.query(Student)
+    if school_id is not None:
+        students_query = students_query.filter(Student.school_id == school_id)
+    students = students_query.filter(Student.is_active == True).all()
+
+    warnings = []
+
+    for student in students:
+        # Get classroom name
+        classroom = db.query(SchoolClass).filter(SchoolClass.id == student.class_id).first()
+        class_name = classroom.name if classroom else "Unknown Class"
+
+        # Fetch attendance records for this student ordered by session date desc
+        records = (
+            db.query(AttendanceRecord)
+            .join(AttendanceSession)
+            .filter(AttendanceRecord.student_id == student.id)
+            .order_by(AttendanceSession.date.desc(), AttendanceRecord.id.desc())
+            .all()
+        )
+
+        total_count = len(records)
+        if total_count == 0:
+            continue
+
+        absent_count = sum(1 for r in records if r.status == "ABSENT")
+        present_count = total_count - absent_count
+        rate = (present_count / total_count) * 100.0
+
+        # Check consecutive absences
+        consecutive_absent = 0
+        for r in records:
+            if r.status == "ABSENT":
+                consecutive_absent += 1
+            else:
+                break
+
+        if consecutive_absent >= 2:
+            warnings.append({
+                "student_id": student.id,
+                "student_name": student.full_name,
+                "class_name": class_name,
+                "warning_type": "consecutive_absence",
+                "message": f"Absent for {consecutive_absent} consecutive classes. Attendance is {rate:.1f}%.",
+                "severity": "critical"
+            })
+        elif total_count >= 3 and rate < 85.0:
+            warnings.append({
+                "student_id": student.id,
+                "student_name": student.full_name,
+                "class_name": class_name,
+                "warning_type": "low_rate",
+                "message": f"Low attendance rate: {rate:.1f}% ({present_count}/{total_count} sessions).",
+                "severity": "warning"
+            })
+
+    return warnings
+

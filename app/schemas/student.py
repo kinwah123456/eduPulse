@@ -13,6 +13,7 @@ class StudentCreate(BaseModel):
     father_contact: str | None = None
     mother_contact: str | None = None
     guardian_contact: str | None = None
+    parent_email: str | None = None
     residential_address: str | None = None
     gender: str | None = None
     identity_card_number: str | None = None
@@ -28,6 +29,7 @@ class StudentUpdate(BaseModel):
     father_contact: str | None = None
     mother_contact: str | None = None
     guardian_contact: str | None = None
+    parent_email: str | None = None
     residential_address: str | None = None
     gender: str | None = None
     identity_card_number: str | None = None
@@ -46,6 +48,7 @@ class StudentResponse(BaseModel):
     father_contact: str | None
     mother_contact: str | None
     guardian_contact: str | None
+    parent_email: str | None
     residential_address: str | None
     gender: str | None
     identity_card_number: str | None

@@ -26,6 +26,91 @@ function showLoadingState() {}
 function hideLoadingState() {}
 
 export async function loadNotificationConnectors() {
+    if (state.isSimulated) {
+        const stored = localStorage.getItem('simulated_connectors');
+        let connectors = [];
+        if (stored) {
+            try {
+                connectors = JSON.parse(stored);
+            } catch (e) {
+                console.error("Failed to parse simulated connectors:", e);
+            }
+        }
+        if (!connectors.length) {
+            connectors = [
+                {
+                    name: 'email',
+                    is_enabled: false,
+                    config: JSON.stringify({
+                        smtp_server: 'smtp.mailtrap.io',
+                        smtp_port: 2525,
+                        sender_email: 'noreply@edupulse.com',
+                        sender_name: 'EduPulse Alerts',
+                        smtp_username: 'mock_user',
+                        smtp_password: 'mock_password',
+                        use_tls: true
+                    })
+                },
+                {
+                    name: 'whatsapp',
+                    is_enabled: false,
+                    config: JSON.stringify({
+                        api_url: 'https://api.twilio.com/mock',
+                        account_sid: 'ACmock',
+                        auth_token: 'mock_token',
+                        sender_number: '+1234567890'
+                    })
+                },
+                {
+                    name: 'sms',
+                    is_enabled: false,
+                    config: JSON.stringify({
+                        account_sid: 'ACmock',
+                        auth_token: 'mock_token',
+                        sender_number: '+1234567890'
+                    })
+                }
+            ];
+            localStorage.setItem('simulated_connectors', JSON.stringify(connectors));
+        }
+
+        // Populates Email Form
+        const emailConn = connectors.find(c => c.name === 'email');
+        if (emailConn) {
+            document.getElementById('email-connector-toggle').checked = emailConn.is_enabled;
+            const config = JSON.parse(emailConn.config || '{}');
+            document.getElementById('email-smtp-server').value = config.smtp_server || '';
+            document.getElementById('email-smtp-port').value = config.smtp_port || '';
+            document.getElementById('email-sender-email').value = config.sender_email || '';
+            document.getElementById('email-sender-name').value = config.sender_name || '';
+            document.getElementById('email-smtp-username').value = config.smtp_username || '';
+            document.getElementById('email-smtp-password').value = config.smtp_password || '';
+            document.getElementById('email-use-tls').checked = !!config.use_tls;
+        }
+
+        // Populates WhatsApp Form
+        const waConn = connectors.find(c => c.name === 'whatsapp');
+        if (waConn) {
+            document.getElementById('whatsapp-connector-toggle').checked = waConn.is_enabled;
+            const config = JSON.parse(waConn.config || '{}');
+            document.getElementById('whatsapp-api-url').value = config.api_url || '';
+            document.getElementById('whatsapp-account-sid').value = config.account_sid || '';
+            document.getElementById('whatsapp-auth-token').value = config.auth_token || '';
+            document.getElementById('whatsapp-sender-number').value = config.sender_number || '';
+        }
+
+        // Populates SMS Form
+        const smsConn = connectors.find(c => c.name === 'sms');
+        if (smsConn) {
+            document.getElementById('sms-connector-toggle').checked = smsConn.is_enabled;
+            const config = JSON.parse(smsConn.config || '{}');
+            document.getElementById('sms-account-sid').value = config.account_sid || '';
+            document.getElementById('sms-auth-token').value = config.auth_token || '';
+            document.getElementById('sms-sender-number').value = config.sender_number || '';
+        }
+        return;
+    }
+
     try {
         const res = await authFetch(`${API_BASE}/notifications/connectors`);
         const data = await res.json();
@@ -54,6 +139,16 @@ export async function loadNotificationConnectors() {
             document.getElementById('whatsapp-account-sid').value = config.account_sid || '';
             document.getElementById('whatsapp-auth-token').value = config.auth_token || '';
             document.getElementById('whatsapp-sender-number').value = config.sender_number || '';
+        }
+
+        // Populates SMS Form
+        const smsConn = connectors.find(c => c.name === 'sms');
+        if (smsConn) {
+            document.getElementById('sms-connector-toggle').checked = smsConn.is_enabled;
+            const config = JSON.parse(smsConn.config || '{}');
+            document.getElementById('sms-account-sid').value = config.account_sid || '';
+            document.getElementById('sms-auth-token').value = config.auth_token || '';
+            document.getElementById('sms-sender-number').value = config.sender_number || '';
         }
     } catch (err) {
         console.error('Error fetching connectors:', err);
@@ -84,8 +179,14 @@ export async function loadNotificationRules() {
                 </div>
             ` : '';
             
-            const eventLabel = rule.event_type === 'student_absent' ? 'Student Absent Alert' : 'Failed Assignment Alert';
-            const channelIcon = rule.connector_type === 'email' ? '<i class="fas fa-envelope text-brand-teal mr-1"></i> Email' : '<i class="fab fa-whatsapp text-green-500 mr-1"></i> WhatsApp';
+            const eventLabel = rule.event_type === 'student_absent' ? 'Student Absent Alert'
+                : rule.event_type === 'feedback_submitted' ? 'Feedback Submitted Alert'
+                : 'Failed Assignment Alert';
+            const channelIcon = rule.connector_type === 'email'
+                ? '<i class="fas fa-envelope text-brand-teal mr-1"></i> Email'
+                : rule.connector_type === 'whatsapp'
+                ? '<i class="fab fa-whatsapp text-green-500 mr-1"></i> WhatsApp'
+                : '<i class="fas fa-comment-sms text-blue-500 mr-1"></i> SMS';
             
             const placeholdersHelp = rule.event_type === 'student_absent' ? 
                 'Available: {student_name}, {date}' : 
@@ -165,9 +266,11 @@ export async function loadNotificationLogs() {
                 '<span class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-[10px] font-bold">Absent Alert</span>' :
                 '<span class="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold">Academic Alert</span>';
                 
-            const channelBadge = log.channel === 'EMAIL' ?
-                '<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold"><i class="fas fa-envelope mr-1"></i>Email</span>' :
-                '<span class="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[10px] font-bold"><i class="fab fa-whatsapp mr-1"></i>WhatsApp</span>';
+            const channelBadge = log.channel === 'EMAIL'
+                ? '<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold"><i class="fas fa-envelope mr-1"></i>Email</span>'
+                : log.channel === 'WHATSAPP'
+                ? '<span class="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[10px] font-bold"><i class="fab fa-whatsapp mr-1"></i>WhatsApp</span>'
+                : '<span class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold"><i class="fas fa-comment-sms mr-1"></i>SMS</span>';
                 
             const statusBadge = log.status === 'SENT' ?
                 '<span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold">Sent</span>' :
@@ -229,6 +332,27 @@ export async function toggleConnector(name) {
     const toggle = document.getElementById(`${name}-connector-toggle`);
     if (!toggle) return;
     
+    if (state.isSimulated) {
+        const stored = localStorage.getItem('simulated_connectors');
+        let connectors = [];
+        if (stored) {
+            try {
+                connectors = JSON.parse(stored);
+            } catch (e) {
+                console.error("Failed to parse simulated connectors:", e);
+            }
+        }
+        const conn = connectors.find(c => c.name === name);
+        if (conn) {
+            conn.is_enabled = toggle.checked;
+        } else {
+            connectors.push({ name, is_enabled: toggle.checked, config: '{}' });
+        }
+        localStorage.setItem('simulated_connectors', JSON.stringify(connectors));
+        showToast(`${name.toUpperCase()} connector ${toggle.checked ? 'enabled' : 'disabled'} (Demo Mode)`, 'success');
+        return;
+    }
+
     try {
         const res = await authFetch(`${API_BASE}/notifications/connectors/${name}`, {
             method: 'PUT',
@@ -262,8 +386,35 @@ export async function saveConnectorSettings(name) {
             auth_token: document.getElementById('whatsapp-auth-token').value,
             sender_number: document.getElementById('whatsapp-sender-number').value
         };
+    } else if (name === 'sms') {
+        config = {
+            account_sid: document.getElementById('sms-account-sid').value,
+            auth_token: document.getElementById('sms-auth-token').value,
+            sender_number: document.getElementById('sms-sender-number').value
+        };
     }
     
+    if (state.isSimulated) {
+        const stored = localStorage.getItem('simulated_connectors');
+        let connectors = [];
+        if (stored) {
+            try {
+                connectors = JSON.parse(stored);
+            } catch (e) {
+                console.error("Failed to parse simulated connectors:", e);
+            }
+        }
+        const conn = connectors.find(c => c.name === name);
+        if (conn) {
+            conn.config = JSON.stringify(config);
+        } else {
+            connectors.push({ name, is_enabled: false, config: JSON.stringify(config) });
+        }
+        localStorage.setItem('simulated_connectors', JSON.stringify(connectors));
+        showToast(`${name.toUpperCase()} configurations saved successfully (Demo Mode)`, 'success');
+        return;
+    }
+
     try {
         const res = await authFetch(`${API_BASE}/notifications/connectors/${name}`, {
             method: 'PUT',
@@ -377,13 +528,19 @@ export async function submitTestConnector(e, name) {
             method: 'POST',
             body: JSON.stringify({ recipient, message })
         });
-        const data = await res.json();
+        
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (jsonErr) {
+            console.error("Failed to parse response as JSON:", jsonErr);
+        }
         
         if (res.ok) {
             showToast(`Test message successfully routed.`, 'success');
             closeEditModal();
         } else {
-            throw new Error(data.detail || 'Test failed');
+            throw new Error(data.detail || `Test failed with status ${res.status}`);
         }
     } catch (err) {
         console.error(err);

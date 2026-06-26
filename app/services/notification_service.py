@@ -38,6 +38,15 @@ def seed_notifications(db: Session) -> None:
                 "sender_number": "+1234567890"
             }),
             "is_enabled": False
+        },
+        {
+            "name": "sms",
+            "config": json.dumps({
+                "account_sid": "ACmock",
+                "auth_token": "mock_token",
+                "sender_number": "+1234567890"
+            }),
+            "is_enabled": False
         }
     ]
 
@@ -77,6 +86,20 @@ def seed_notifications(db: Session) -> None:
             "passing_threshold": 50.0
         },
         {
+            "event_type": "student_absent",
+            "connector_type": "sms",
+            "template": "Alert: Your child {student_name} was marked ABSENT on {date}. - EduPulse",
+            "is_enabled": False,
+            "passing_threshold": None
+        },
+        {
+            "event_type": "assignment_failed",
+            "connector_type": "sms",
+            "template": "Alert: {student_name} scored {score}/{max_points} on '{assignment_title}' (below {passing_threshold}%). - EduPulse",
+            "is_enabled": False,
+            "passing_threshold": 50.0
+        },
+        {
             "event_type": "feedback_submitted",
             "connector_type": "email",
             "template": "A new feedback submission has been received on {datetime}. Location: {location}. Identified As: {identification}. Description: {description}",
@@ -87,6 +110,13 @@ def seed_notifications(db: Session) -> None:
             "event_type": "feedback_submitted",
             "connector_type": "whatsapp",
             "template": "New feedback received on {datetime} at {location}. Identified As: {identification}. Description: {description}",
+            "is_enabled": False,
+            "passing_threshold": None
+        },
+        {
+            "event_type": "feedback_submitted",
+            "connector_type": "sms",
+            "template": "New feedback on {datetime}. Location: {location}. ID: {identification}. {description} - EduPulse",
             "is_enabled": False,
             "passing_threshold": None
         }
@@ -161,6 +191,10 @@ def get_logs(db: Session, skip: int = 0, limit: int = 100) -> tuple[list[Notific
 
 def resolve_parent_contact(student: Student, channel: str) -> str | None:
     """Find a parent contact matching the channel (email vs phone number)."""
+    if channel.upper() == "EMAIL":
+        if hasattr(student, "parent_email") and student.parent_email and student.parent_email.strip():
+            return student.parent_email.strip()
+
     contacts = [student.father_contact, student.mother_contact, student.guardian_contact]
     # Filter out empty or None
     contacts = [c.strip() for c in contacts if c and c.strip()]
@@ -182,15 +216,18 @@ def resolve_parent_contact(student: Student, channel: str) -> str | None:
         return contacts[0] if "@" not in contacts[0] else None
 
 
-def send_email(config: dict, recipient: str, subject: str, body: str) -> None:
-    """Send an email using smtp, or mock if configured."""
+def send_email(config: dict, recipient: str, subject: str, body: str) -> str:
+    """Send an email using smtp, or mock if configured. Returns SMTP message ID."""
+    import uuid
+    message_id = f"<{uuid.uuid4()}@edupulse.local>"
+    
     smtp_server = config.get("smtp_server", "")
     smtp_user = config.get("smtp_username", "")
     
     is_mock = "mock" in smtp_server.lower() or "mock" in smtp_user.lower() or not smtp_server
     if is_mock:
-        print(f"[MOCK EMAIL] To: {recipient} | Subject: {subject} | Body: {body}")
-        return
+        print(f"[MOCK EMAIL] To: {recipient} | Subject: {subject} | Body: {body} | MsgID: {message_id}")
+        return message_id
 
     import smtplib
     from email.mime.text import MIMEText
@@ -200,6 +237,7 @@ def send_email(config: dict, recipient: str, subject: str, body: str) -> None:
     msg['From'] = f"{config.get('sender_name', 'EduPulse')} <{config.get('sender_email')}>"
     msg['To'] = recipient
     msg['Subject'] = subject
+    msg['Message-ID'] = message_id
     msg.attach(MIMEText(body, 'plain'))
 
     smtp_port = int(config.get("smtp_port", 587))
@@ -216,6 +254,7 @@ def send_email(config: dict, recipient: str, subject: str, body: str) -> None:
     
     server.sendmail(config.get("sender_email"), recipient, msg.as_string())
     server.quit()
+    return message_id
 
 
 def send_whatsapp(config: dict, recipient: str, body: str) -> None:
@@ -267,6 +306,40 @@ def send_whatsapp(config: dict, recipient: str, body: str) -> None:
             raise Exception(f"WhatsApp API returned status {response.status}")
 
 
+def send_sms(config: dict, recipient: str, body: str) -> None:
+    """Send an SMS via Twilio REST API, or mock if configured."""
+    account_sid = config.get("account_sid", "")
+    auth_token = config.get("auth_token", "")
+    sender_number = config.get("sender_number", "")
+
+    is_mock = "mock" in account_sid.lower() or "mock" in auth_token.lower() or not account_sid
+    if is_mock:
+        print(f"[MOCK SMS] To: {recipient} | Body: {body}")
+        return
+
+    import urllib.request
+    import urllib.parse
+    import base64
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+    auth_str = f"{account_sid}:{auth_token}"
+    b64_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+
+    data = urllib.parse.urlencode({
+        "To": recipient,
+        "From": sender_number,
+        "Body": body
+    }).encode("utf-8")
+
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("Authorization", f"Basic {b64_auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    with urllib.request.urlopen(req, timeout=10) as response:
+        if response.status not in [200, 201]:
+            raise Exception(f"Twilio SMS API returned status {response.status}")
+
+
 def test_connector(db: Session, name: str, recipient: str, message: str) -> None:
     """Test a connector with a simple message."""
     connector = db.query(NotificationConnector).filter(NotificationConnector.name == name).first()
@@ -275,12 +348,19 @@ def test_connector(db: Session, name: str, recipient: str, message: str) -> None
         
     config = json.loads(connector.config)
     
-    if name == "email":
-        send_email(config, recipient, "EduPulse Connector Test", message)
-    elif name == "whatsapp":
-        send_whatsapp(config, recipient, message)
-    else:
-        raise ValidationException(f"Unsupported connector channel '{name}'")
+    try:
+        if name == "email":
+            send_email(config, recipient, "EduPulse Connector Test", message)
+        elif name == "whatsapp":
+            send_whatsapp(config, recipient, message)
+        elif name == "sms":
+            send_sms(config, recipient, message)
+        else:
+            raise ValidationException(f"Unsupported connector channel '{name}'")
+    except Exception as e:
+        if isinstance(e, (NotFoundException, ConflictException, ValidationException)):
+            raise e
+        raise ValidationException(f"Connection test failed: {str(e)}")
 
 
 def trigger_attendance_notifications(db: Session, session: AttendanceSession) -> None:
@@ -351,11 +431,15 @@ def trigger_attendance_notifications(db: Session, session: AttendanceSession) ->
             # Send and create log
             status = "SENT"
             error_msg = None
+            smtp_message_id = None
             try:
                 if conn_type == "email":
-                    send_email(config, parent_contact, "Student Absence Notification", message_body)
+                    res = send_email(config, parent_contact, "Student Absence Notification", message_body)
+                    smtp_message_id = res if isinstance(res, str) else None
                 elif conn_type == "whatsapp":
                     send_whatsapp(config, parent_contact, message_body)
+                elif conn_type == "sms":
+                    send_sms(config, parent_contact, message_body)
             except Exception as e:
                 status = "FAILED"
                 error_msg = str(e)
@@ -369,7 +453,8 @@ def trigger_attendance_notifications(db: Session, session: AttendanceSession) ->
                 message_body=message_body,
                 status=status,
                 error_message=error_msg,
-                reference_id=session.id
+                reference_id=session.id,
+                smtp_message_id=smtp_message_id
             )
             db.add(log)
             db.commit()
@@ -456,11 +541,15 @@ def trigger_grade_notifications(db: Session, grade: StudentGrade) -> None:
         # Send and log
         status = "SENT"
         error_msg = None
+        smtp_message_id = None
         try:
             if conn_type == "email":
-                send_email(config, parent_contact, "Academic Alert: Student Grade Notification", message_body)
+                res = send_email(config, parent_contact, "Academic Alert: Student Grade Notification", message_body)
+                smtp_message_id = res if isinstance(res, str) else None
             elif conn_type == "whatsapp":
                 send_whatsapp(config, parent_contact, message_body)
+            elif conn_type == "sms":
+                send_sms(config, parent_contact, message_body)
         except Exception as e:
             status = "FAILED"
             error_msg = str(e)
@@ -474,7 +563,8 @@ def trigger_grade_notifications(db: Session, grade: StudentGrade) -> None:
             message_body=message_body,
             status=status,
             error_message=error_msg,
-            reference_id=grade.id
+            reference_id=grade.id,
+            smtp_message_id=smtp_message_id
         )
         db.add(log)
         db.commit()
@@ -516,9 +606,12 @@ def retry_notification(db: Session, log_id: int) -> NotificationLog:
     # Send
     try:
         if connector_name == "email":
-            send_email(config, recipient, "Academic / Attendance Alert (Retry)", log.message_body)
+            res = send_email(config, recipient, "Academic / Attendance Alert (Retry)", log.message_body)
+            log.smtp_message_id = res if isinstance(res, str) else None
         elif connector_name == "whatsapp":
             send_whatsapp(config, recipient, log.message_body)
+        elif connector_name == "sms":
+            send_sms(config, recipient, log.message_body)
         
         log.status = "SENT"
         log.error_message = None
@@ -602,13 +695,13 @@ def trigger_feedback_notifications(db: Session, submission) -> None:
             
     dt_str = submission.created_at.strftime("%d/%m/%Y %I:%M %p") if submission.created_at else datetime.now().strftime("%d/%m/%Y %I:%M %p")
     
+    connectors = {c.name.lower(): c for c in db.query(NotificationConnector).filter(NotificationConnector.is_enabled == True).all()}
+    
     for rule in active_rules:
         conn_type = rule.connector_type.lower()
-        connector = db.query(NotificationConnector).filter(
-            NotificationConnector.name == conn_type
-        ).first()
+        connector = connectors.get(conn_type)
         
-        if not connector or not connector.is_enabled:
+        if not connector:
             continue
             
         try:
@@ -618,6 +711,8 @@ def trigger_feedback_notifications(db: Session, submission) -> None:
             
         recipient = admin_email
         if conn_type == "whatsapp":
+            recipient = config.get("sender_number", "+6012-3456789")
+        elif conn_type == "sms":
             recipient = config.get("sender_number", "+6012-3456789")
             
         message_body = (
@@ -630,11 +725,15 @@ def trigger_feedback_notifications(db: Session, submission) -> None:
         
         status = "SENT"
         error_msg = None
+        smtp_message_id = None
         try:
             if conn_type == "email":
-                send_email(config, recipient, "New Feedback Submission Received", message_body)
+                res = send_email(config, recipient, "New Feedback Submission Received", message_body)
+                smtp_message_id = res if isinstance(res, str) else None
             elif conn_type == "whatsapp":
                 send_whatsapp(config, recipient, message_body)
+            elif conn_type == "sms":
+                send_sms(config, recipient, message_body)
         except Exception as e:
             status = "FAILED"
             error_msg = str(e)
@@ -648,8 +747,91 @@ def trigger_feedback_notifications(db: Session, submission) -> None:
             message_body=message_body,
             status=status,
             error_message=error_msg,
-            reference_id=submission.id
+            reference_id=submission.id,
+            smtp_message_id=smtp_message_id
         )
         db.add(log)
     db.commit()
+
+
+def process_webhook_event(db: Session, provider: str, payload: dict | list) -> int:
+    """
+    Process incoming webhook delivery status events from SendGrid, Mailgun, or Generic.
+    Returns the number of logs updated.
+    """
+    updated_count = 0
+    provider = provider.lower()
+    
+    events = []
+    if provider == "sendgrid" and isinstance(payload, list):
+        for item in payload:
+            msg_id = item.get("smtp-id")
+            event_type = item.get("event")
+            reason = item.get("reason")
+            events.append({
+                "message_id": msg_id,
+                "status": "DELIVERED" if event_type == "delivered" else "FAILED",
+                "error_message": reason if event_type != "delivered" else None
+            })
+    elif provider == "mailgun" and isinstance(payload, dict):
+        event_data = payload.get("event-data", {})
+        event_type = event_data.get("event")
+        msg_headers = event_data.get("message", {}).get("headers", {})
+        msg_id = msg_headers.get("message-id")
+        
+        status = "DELIVERED" if event_type == "delivered" else "FAILED"
+        reason = None
+        if status == "FAILED":
+            reason = event_data.get("delivery-status", {}).get("message") or event_data.get("reason")
+            
+        if msg_id:
+            events.append({
+                "message_id": msg_id,
+                "status": status,
+                "error_message": reason
+            })
+    elif provider == "generic" and isinstance(payload, dict):
+        msg_id = payload.get("message_id")
+        status_val = payload.get("status", "").upper()
+        if msg_id:
+            events.append({
+                "message_id": msg_id,
+                "status": "DELIVERED" if status_val in ("DELIVERED", "SUCCESS") else "FAILED",
+                "error_message": payload.get("error_message")
+            })
+    elif provider == "smtp2go" and isinstance(payload, dict):
+        msg_id = payload.get("message-id")
+        event_type = payload.get("event", "").lower()
+        reason = payload.get("description") or payload.get("error")
+        status = "DELIVERED" if event_type == "delivered" else "FAILED"
+        if msg_id:
+            events.append({
+                "message_id": msg_id,
+                "status": status,
+                "error_message": reason if status == "FAILED" else None
+            })
+
+    for ev in events:
+        msg_id = ev["message_id"]
+        if not msg_id:
+            continue
+            
+        # Lookup log by Message-ID (exact or without brackets)
+        log = db.query(NotificationLog).filter(NotificationLog.smtp_message_id == msg_id).first()
+        if not log:
+            clean_id = msg_id.strip("<>")
+            log = db.query(NotificationLog).filter(
+                (NotificationLog.smtp_message_id == clean_id) | 
+                (NotificationLog.smtp_message_id == f"<{clean_id}>")
+            ).first()
+            
+        if log:
+            log.status = ev["status"]
+            if ev["error_message"]:
+                log.error_message = ev["error_message"]
+            db.commit()
+            updated_count += 1
+            
+    return updated_count
+
 

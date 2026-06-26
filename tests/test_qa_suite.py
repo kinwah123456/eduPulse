@@ -451,15 +451,15 @@ def test_edupulse_full_qa_workflow(client: TestClient, db_session: Session):
     assert resp.json()["status"] == "COMPLETED"
     
     # 3. Batch Upload ZIP containing OMR files
-    zip_path = r"c:\Users\tse\Desktop\eduPulse\Sample Submissions.zip"
-    assert os.path.exists(zip_path), "Sample Submissions.zip not found in workspace"
+    zip_path = r"c:\Users\tse\Desktop\eduPulse\Sample Submission v2.zip"
+    assert os.path.exists(zip_path), "Sample Submission v2.zip not found in workspace"
     
     with open(zip_path, "rb") as zf:
         resp = client.post("/api/v1/grading/batch-upload", headers=teacher_headers, data={
             "class_id": 1,
             "assessment_id": assessment_id
         }, files={
-            "file": ("Sample Submissions.zip", zf, "application/zip")
+            "file": ("Sample Submission v2.zip", zf, "application/zip")
         })
         
     assert resp.status_code == 200

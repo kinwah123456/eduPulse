@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, users, schools, students, teachers, attendance, schedules, classes, grading, merit, automation, notifications
+from app.api.v1 import auth, users, schools, students, teachers, attendance, schedules, classes, grading, merit, automation, notifications, webhooks
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
@@ -17,4 +17,6 @@ api_v1_router.include_router(grading.router, prefix="/grading", tags=["Grading"]
 api_v1_router.include_router(merit.router, prefix="/merit", tags=["Merit"])
 api_v1_router.include_router(automation.router, prefix="/automation", tags=["Automation"])
 api_v1_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+api_v1_router.include_router(webhooks.router, prefix="/notifications/webhooks", tags=["Webhooks"])
+
 

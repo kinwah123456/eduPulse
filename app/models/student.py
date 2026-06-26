@@ -24,6 +24,7 @@ class Student(TimestampMixin, Base):
     father_contact: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     mother_contact: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     guardian_contact: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    parent_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     residential_address: Mapped[Optional[str]] = mapped_column(String(555), nullable=True)
     gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     identity_card_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

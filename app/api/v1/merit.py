@@ -91,10 +91,12 @@ def award_merit_points(
 
 @router.get("/logs", response_model=list[MeritLogResponse])
 def get_merit_logs(
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     _: User = Depends(require_teacher_or_admin)
 ):
-    return merit_service.get_merit_logs(db)
+    return merit_service.get_merit_logs(db, skip=skip, limit=limit)
 
 
 @router.delete("/logs/{log_id}")
@@ -131,10 +133,12 @@ def create_feedback_submission(
 
 @router.get("/submissions", response_model=list[MeritSubmissionResponse])
 def list_feedback_submissions(
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
     _: User = Depends(require_teacher_or_admin)
 ):
-    return merit_service.get_feedback_submissions(db)
+    return merit_service.get_feedback_submissions(db, skip=skip, limit=limit)
 
 
 @router.post("/submissions/{submission_id}/acknowledge", response_model=MeritSubmissionResponse)

@@ -61,6 +61,9 @@ def init_db() -> None:
             if "guardian_contact" not in student_cols:
                 conn.exec_driver_sql("ALTER TABLE students ADD COLUMN guardian_contact VARCHAR(50)")
                 print("Added column 'guardian_contact' to 'students' table.")
+            if "parent_email" not in student_cols:
+                conn.exec_driver_sql("ALTER TABLE students ADD COLUMN parent_email VARCHAR(255)")
+                print("Added column 'parent_email' to 'students' table.")
             if "residential_address" not in student_cols:
                 conn.exec_driver_sql("ALTER TABLE students ADD COLUMN residential_address VARCHAR(555)")
                 print("Added column 'residential_address' to 'students' table.")
@@ -79,5 +82,12 @@ def init_db() -> None:
             if "merit_points" not in student_cols:
                 conn.exec_driver_sql("ALTER TABLE students ADD COLUMN merit_points INTEGER DEFAULT 50")
                 print("Added column 'merit_points' to 'students' table.")
+
+            # Notification logs migrations
+            cursor = conn.exec_driver_sql("PRAGMA table_info(notification_logs)")
+            log_cols = [row[1] for row in cursor.fetchall()]
+            if "smtp_message_id" not in log_cols:
+                conn.exec_driver_sql("ALTER TABLE notification_logs ADD COLUMN smtp_message_id VARCHAR(255)")
+                print("Added column 'smtp_message_id' to 'notification_logs' table.")
     except Exception as e:
         print(f"Dynamic migration warning: {e}")

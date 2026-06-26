@@ -12,7 +12,7 @@ from app.schemas.academic import SubjectResponse, SubjectListResponse, SubjectCr
 from app.schemas.grading import (
     AssessmentCreate, AssessmentUpdate, AssessmentResponse, AssessmentListResponse,
     StudentGradeCreate, StudentGradeResponse, StudentGradeListResponse,
-    BatchGradeConfirmRequest
+    BatchGradeConfirmRequest, BatchOMRRecordUpdateItem, BatchOMRRecordUpdateRequest
 )
 from app.services import grading_service
 
@@ -236,8 +236,7 @@ async def batch_upload(
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
         
     try:
-        content = await file.read()
-        results = grading_service.process_batch_zip(db, content, class_id, assessment_id)
+        results = grading_service.process_batch_zip(db, file.file, class_id, assessment_id)
         return {"session_id": results[0]["image_url"].split("/")[3] if results else None, "sheets": results}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -251,6 +250,7 @@ async def batch_confirm(
     _: User = Depends(require_teacher_or_admin)
 ):
     results = []
+    batch_records_data = []
     for item in body.grades:
         grade_payload = {
             "student_id": item.student_id,
@@ -285,7 +285,25 @@ async def batch_confirm(
                                 warnings.append(
                                     f"Parent/guardian contact details missing for {student.full_name} ({conn_type.upper()} academic alert failed)"
                                 )
-                                
+            
+            student = db.query(Student).filter(Student.id == item.student_id).first()
+            student_name = student.full_name if student else f"Student {item.student_id}"
+            
+            import json
+            try:
+                feedback_data = json.loads(grade.feedback)
+            except Exception:
+                feedback_data = {}
+                
+            batch_records_data.append({
+                "student_id": item.student_id,
+                "student_name": student_name,
+                "score": grade.score,
+                "student_response": item.student_response,
+                "correct_count": feedback_data.get("correct_count", 0),
+                "total_questions": feedback_data.get("total_questions", 0)
+            })
+            
             results.append({
                 "student_id": item.student_id,
                 "status": "success",
@@ -300,6 +318,18 @@ async def batch_confirm(
                 "detail": str(e)
             })
             
+    # Save the batch OMR record in database history
+    if batch_records_data:
+        from app.models.grading import BatchOMRRecord
+        import json
+        batch_rec = BatchOMRRecord(
+            assessment_id=body.assessment_id,
+            filename=body.filename or "Batch OMR Results",
+            data=json.dumps(batch_records_data)
+        )
+        db.add(batch_rec)
+        db.commit()
+            
     # Clean up temporary upload files if session_id is provided
     if body.session_id:
         try:
@@ -308,5 +338,214 @@ async def batch_confirm(
             print(f"Failed to clean up temp submissions for session {body.session_id}: {e}")
             
     return {"message": "Batch grading completed", "results": results}
+
+
+@router.delete("/batch-temp/{session_id}")
+def delete_batch_temp(
+    session_id: str,
+    _: User = Depends(require_teacher_or_admin)
+):
+    try:
+        grading_service.delete_temp_submission(session_id)
+        return {"message": f"Temporary submission session {session_id} cleaned up successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/batch-records")
+def list_batch_records(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_teacher_or_admin)
+):
+    from app.models.grading import BatchOMRRecord, Assessment
+    from app.models.academic import Subject
+    import json
+    
+    records = db.query(BatchOMRRecord).order_by(BatchOMRRecord.created_at.desc()).all()
+    results = []
+    
+    for r in records:
+        assessment = db.query(Assessment).filter(Assessment.id == r.assessment_id).first()
+        assessment_title = assessment.title if assessment else "Unknown Assessment"
+        subject_name = ""
+        if assessment:
+            subject = db.query(Subject).filter(Subject.id == assessment.subject_id).first()
+            if subject:
+                subject_name = subject.name
+                
+        try:
+            sheets_data = json.loads(r.data)
+            sheets_count = len(sheets_data)
+        except Exception:
+            sheets_count = 0
+            
+        results.append({
+            "id": r.id,
+            "assessment_id": r.assessment_id,
+            "assessment_title": assessment_title,
+            "subject_name": subject_name,
+            "filename": r.filename,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "sheets_count": sheets_count
+        })
+        
+    return results
+
+
+@router.get("/batch-records/{record_id}")
+def get_batch_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_teacher_or_admin)
+):
+    from app.models.grading import BatchOMRRecord, Assessment
+    import json
+    
+    record = db.query(BatchOMRRecord).filter(BatchOMRRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Batch record not found")
+        
+    assessment = db.query(Assessment).filter(Assessment.id == record.assessment_id).first()
+    answer_key = {}
+    if assessment:
+        try:
+            answer_key = json.loads(assessment.config)
+        except Exception:
+            pass
+            
+    try:
+        sheets_data = json.loads(record.data)
+    except Exception:
+        sheets_data = []
+        
+    return {
+        "id": record.id,
+        "assessment_id": record.assessment_id,
+        "assessment_title": assessment.title if assessment else "Unknown Assessment",
+        "answer_key": answer_key,
+        "filename": record.filename,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "sheets": sheets_data
+    }
+
+
+@router.put("/batch-records/{record_id}")
+async def update_batch_record(
+    record_id: int,
+    body: BatchOMRRecordUpdateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_teacher_or_admin)
+):
+    from app.models.grading import BatchOMRRecord, Assessment
+    import json
+    
+    record = db.query(BatchOMRRecord).filter(BatchOMRRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Batch record not found")
+        
+    if body.filename is not None:
+        record.filename = body.filename
+        
+    if body.grades is not None:
+        assessment = db.query(Assessment).filter(Assessment.id == record.assessment_id).first()
+        if not assessment:
+            raise HTTPException(status_code=400, detail="Assessment not found for this batch record")
+            
+        try:
+            current_sheets = json.loads(record.data)
+        except Exception:
+            current_sheets = []
+            
+        sheets_map = {s["student_id"]: s for s in current_sheets}
+        
+        for item in body.grades:
+            grade_payload = {
+                "student_id": item.student_id,
+                "assessment_id": record.assessment_id,
+                "student_response": item.student_response
+            }
+            grade = await grading_service.grade_submission(db, grade_payload, background_tasks)
+            
+            try:
+                feedback_data = json.loads(grade.feedback)
+            except Exception:
+                feedback_data = {}
+                
+            if item.student_id in sheets_map:
+                sheets_map[item.student_id]["student_response"] = item.student_response
+                sheets_map[item.student_id]["score"] = grade.score
+                sheets_map[item.student_id]["correct_count"] = feedback_data.get("correct_count", 0)
+                sheets_map[item.student_id]["total_questions"] = feedback_data.get("total_questions", 0)
+                
+        record.data = json.dumps(list(sheets_map.values()))
+        
+    db.commit()
+    db.refresh(record)
+    return {"message": "Batch record updated successfully", "record_id": record.id}
+
+
+@router.get("/batch-records/{record_id}/download-csv")
+def download_batch_csv(
+    record_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_teacher_or_admin)
+):
+    from app.models.grading import BatchOMRRecord, Assessment
+    from app.models.student import Student
+    from app.models.academic import SchoolClass, Subject
+    from datetime import datetime
+    import csv
+    import io
+    import json
+    from fastapi.responses import StreamingResponse
+    
+    record = db.query(BatchOMRRecord).filter(BatchOMRRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Batch record not found")
+        
+    assessment = db.query(Assessment).filter(Assessment.id == record.assessment_id).first()
+    subject_name = "Unknown Subject"
+    if assessment:
+        subject = db.query(Subject).filter(Subject.id == assessment.subject_id).first()
+        if subject:
+            subject_name = subject.name
+            
+    try:
+        sheets_data = json.loads(record.data)
+    except Exception:
+        sheets_data = []
+        
+    classroom_name = "Unknown Class"
+    if sheets_data:
+        first_student_id = sheets_data[0].get("student_id")
+        if first_student_id:
+            student = db.query(Student).filter(Student.id == first_student_id).first()
+            if student and student.class_id:
+                cls = db.query(SchoolClass).filter(SchoolClass.id == student.class_id).first()
+                if cls:
+                    classroom_name = cls.name
+                    
+    current_dt = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    csv_filename = f"{classroom_name}-{subject_name}-{current_dt}.csv"
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow(["Student Name", "Score (%)", "Correct Answers", "Total Questions"])
+    for s in sheets_data:
+        writer.writerow([
+            s.get("student_name", ""),
+            s.get("score", 0.0),
+            s.get("correct_count", 0),
+            s.get("total_questions", 0)
+        ])
+        
+    output.seek(0)
+    headers = {
+        'Content-Disposition': f'attachment; filename="{csv_filename}"'
+    }
+    return StreamingResponse(iter([output.getvalue()]), media_type="text/csv", headers=headers)
+
 
 

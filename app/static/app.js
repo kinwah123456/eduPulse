@@ -358,6 +358,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Judge Login Click Handler ---
+    const judgeLoginBtn = document.getElementById('judge-login-btn');
+    if (judgeLoginBtn) {
+        judgeLoginBtn.addEventListener('click', async () => {
+            judgeLoginBtn.disabled = true;
+            const originalText = judgeLoginBtn.innerHTML;
+            judgeLoginBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Accessing Dashboard...';
+
+            try {
+                const response = await fetch('/api/v1/auth/judge-login', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('token', data.access_token);
+                    showToast('Authenticated as Judge (Admin). Redirecting...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                } else {
+                    showToast('Backend authentication failed. Initializing offline demo...', 'error');
+                    setTimeout(() => {
+                        localStorage.setItem('token', 'simulated-jwt-token-for-admin@edupulse.local');
+                        window.location.href = '/dashboard';
+                    }, 1200);
+                }
+            } catch (error) {
+                console.error('Judge Login Error:', error);
+                showToast('Server connection failed. Initializing offline demo...', 'warning');
+                setTimeout(() => {
+                    localStorage.setItem('token', 'simulated-jwt-token-for-admin@edupulse.local');
+                    window.location.href = '/dashboard';
+                }, 1200);
+            }
+        });
+    }
+
     // Registration Form Submit
     signupForm.addEventListener('submit', async (e) => {
         e.preventDefault();
